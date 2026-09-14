@@ -8,15 +8,15 @@ import Spinner from '../components/Spinner';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { session, loading } = useAuth();
+  const { session, loading, isAdmin } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Already logged in
-  if (!loading && session) {
+  // Already logged in as Admin
+  if (!loading && session && isAdmin) {
     return <Navigate to="/admin" replace />;
   }
 
@@ -36,7 +36,7 @@ export default function LoginPage() {
       return;
     }
 
-    // Check if account is active in user_profiles
+    // Check account status and role in user_profiles
     const userId = authData?.user?.id;
     if (userId) {
       const { data: profile } = await supabase
@@ -48,17 +48,23 @@ export default function LoginPage() {
       if (profile && profile.is_active === false) {
         await supabase.auth.signOut();
         setSubmitting(false);
-        toast.error('Your coordinator account has been disabled by the admin.');
+        toast.error('Your account has been disabled by the admin.');
+        return;
+      }
+
+      if (profile && profile.role === 'coordinator') {
+        await supabase.auth.signOut();
+        setSubmitting(false);
+        toast.error('Access Denied: Main Admin credentials required. Coordinators cannot access the Management Portal.');
         return;
       }
 
       setSubmitting(false);
-      const roleTitle = profile?.role === 'coordinator' ? 'Coordinator' : 'Admin';
-      toast.success(`Welcome back (${roleTitle})!`);
+      toast.success('Welcome back, Admin!');
       navigate('/admin');
     } else {
       setSubmitting(false);
-      toast.success('Welcome back!');
+      toast.success('Welcome back, Admin!');
       navigate('/admin');
     }
   };
@@ -71,8 +77,8 @@ export default function LoginPage() {
           <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center mb-4 shadow-md">
             <GraduationCap size={28} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Portal Login</h1>
-          <p className="text-slate-500 text-sm mt-1">Sign in with Admin or Coordinator credentials</p>
+          <h1 className="text-2xl font-bold text-slate-900">Management Portal</h1>
+          <p className="text-slate-500 text-sm mt-1">Sign in with Main Admin credentials</p>
         </div>
 
         {/* Form */}

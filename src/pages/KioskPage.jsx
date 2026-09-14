@@ -599,7 +599,36 @@ export default function KioskPage() {
       const safePhone     = phoneDigits;
       const safeSchool    = sanitizeText(form.school_name);
       const safeCity      = sanitizeText(form.city);
+      const registrationId = generateRegistrationId();
 
+      // 1. Try atomic register_student RPC function (bypasses RETURNING RLS permissions)
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('register_student', {
+        p_name: safeName,
+        p_email: safeEmail,
+        p_phone: safePhone,
+        p_school_name: safeSchool,
+        p_city: safeCity,
+        p_photo_url: photoUrl,
+        p_session_id: form.sessionId,
+        p_registration_id: registrationId,
+      });
+
+      if (!rpcErr && rpcRes && rpcRes.success) {
+        navigate(`/success/${registrationId}`);
+        return;
+      }
+
+      if (rpcRes && rpcRes.success === false && rpcRes.error) {
+        if (rpcRes.error.includes('23505') || rpcRes.error.includes('duplicate')) {
+          toast.error('A student with these details is already registered for this session.');
+        } else {
+          toast.error('Registration failed: ' + rpcRes.error);
+        }
+        setSubmitting(false);
+        return;
+      }
+
+      // 2. Fallback to direct insertion
       const { data: student, error: studentError } = await supabase
         .from('students')
         .insert({
@@ -623,13 +652,12 @@ export default function KioskPage() {
         return;
       }
 
-      const registrationId = generateRegistrationId();
       const { data: reg, error: regError } = await supabase
         .from('registrations')
         .insert({
           student_id: student.id,
           session_id: form.sessionId,
-          class: safeEmail, // fallback for class column
+          class: safeEmail,
           email: safeEmail,
           city: safeCity,
           registration_id: registrationId,
@@ -689,10 +717,19 @@ export default function KioskPage() {
                 <GraduationCap size={24} className="text-white" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Student Registration Portal</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Student Capacity Program</h1>
                 <p className="text-xs text-slate-400">Admission Counter & Kiosk System</p>
               </div>
             </div>
+            <a
+              href="/admin/login"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              title="Open Admin Portal in new tab"
+            >
+              <Shield size={14} className="text-blue-600" /> Admin Portal
+            </a>
           </div>
         </header>
 
@@ -776,12 +813,21 @@ export default function KioskPage() {
               <GraduationCap size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Student Registration Portal</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Student Capacity Program</h1>
               <p className="text-xs text-slate-400 font-medium">National Science Innovation Program</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+            <a
+              href="/admin/login"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              title="Open Admin Portal in new tab"
+            >
+              <Shield size={14} className="text-blue-600" /> Admin Portal
+            </a>
             <Link
               to="/verify"
               className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"

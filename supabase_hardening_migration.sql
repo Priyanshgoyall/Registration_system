@@ -49,22 +49,28 @@ BEGIN
   END IF;
 END $$;
 
--- students: Anonymous can INSERT (for kiosk registration); authenticated full access
+-- students: Anonymous can INSERT & SELECT (for kiosk registration); authenticated full access
 DO $$ 
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'students' AND policyname = 'anon_insert_students') THEN
     CREATE POLICY "anon_insert_students" ON public.students FOR INSERT TO anon WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'students' AND policyname = 'anon_select_students') THEN
+    CREATE POLICY "anon_select_students" ON public.students FOR SELECT TO anon USING (true);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'students' AND policyname = 'auth_students_all') THEN
     CREATE POLICY "auth_students_all" ON public.students FOR ALL TO authenticated USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
--- registrations: Anonymous can INSERT; authenticated full access
+-- registrations: Anonymous can INSERT & SELECT; authenticated full access
 DO $$ 
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'registrations' AND policyname = 'anon_insert_registrations') THEN
     CREATE POLICY "anon_insert_registrations" ON public.registrations FOR INSERT TO anon WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'registrations' AND policyname = 'anon_select_registrations') THEN
+    CREATE POLICY "anon_select_registrations" ON public.registrations FOR SELECT TO anon USING (true);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'registrations' AND policyname = 'auth_registrations_all') THEN
     CREATE POLICY "auth_registrations_all" ON public.registrations FOR ALL TO authenticated USING (true) WITH CHECK (true);
@@ -217,6 +223,48 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION public.check_existing_registration(text, text, uuid) TO anon, authenticated;
+
+
+-- Atomic Student Registration RPC
+CREATE OR REPLACE FUNCTION public.register_student(
+  p_name text,
+  p_email text,
+  p_phone text,
+  p_school_name text,
+  p_city text,
+  p_photo_url text,
+  p_session_id uuid,
+  p_registration_id text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_student_id uuid;
+  v_reg_id uuid;
+BEGIN
+  INSERT INTO public.students (name, email, phone, school_name, city, photo_url)
+  VALUES (p_name, p_email, p_phone, p_school_name, p_city, p_photo_url)
+  RETURNING id INTO v_student_id;
+
+  INSERT INTO public.registrations (student_id, session_id, class, email, city, registration_id, registration_status)
+  VALUES (v_student_id, p_session_id, p_email, p_email, p_city, p_registration_id, 'confirmed')
+  RETURNING id INTO v_reg_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'student_id', v_student_id,
+    'registration_id', p_registration_id
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'success', false,
+    'error', SQLERRM
+  );
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.register_student(text, text, text, text, text, text, uuid, text) TO anon, authenticated;
 
 
 -- Coordinator Account Pre-Check RPC

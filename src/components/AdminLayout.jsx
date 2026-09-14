@@ -50,7 +50,7 @@ export default function AdminLayout({ children }) {
           <GraduationCap size={20} className="text-white" />
         </div>
         <div>
-          <p className="text-sm font-bold text-slate-900 leading-tight">Student Reg</p>
+          <p className="text-sm font-bold text-slate-900 leading-tight">Admin Portal</p>
           <p className="text-xs text-slate-400">Management Portal</p>
         </div>
       </div>
@@ -135,7 +135,7 @@ export default function AdminLayout({ children }) {
           </button>
           <div className="flex items-center gap-2">
             <GraduationCap size={18} className="text-blue-600" />
-            <span className="font-semibold text-slate-900 text-sm">Admin Panel</span>
+            <span className="font-semibold text-slate-900 text-sm">Management Portal</span>
           </div>
         </header>
 

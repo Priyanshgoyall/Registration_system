@@ -116,3 +116,40 @@
   from { transform: translateY(12px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+
+/* ── Print Media Styles: Print ONLY the registration card with FULL colors & logos ── */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  .printable-card,
+  .printable-card * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  .printable-card {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+  }
+  .printable-card svg {
+    display: inline-block !important;
+    visibility: visible !important;
+  }
+  @page {
+    size: 8.5cm 5.5cm;
+    margin: 0;
+  }
+}

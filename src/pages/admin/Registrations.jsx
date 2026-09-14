@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ClipboardList, CheckCircle, XCircle, Filter, Download, FileText } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, Filter, Download, FileText, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
@@ -21,6 +21,8 @@ export default function Registrations() {
   const [actionTarget, setActionTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
   const PAGE_SIZE = 25;
 
   const fetchAll = async () => {
@@ -35,6 +37,31 @@ export default function Registrations() {
   };
 
   useEffect(() => { fetchAll(); }, []);
+
+  const handleDeleteAll = async () => {
+    setDeletingAll(true);
+    try {
+      // Deletes ONLY registration records, preserving students, sessions, attendance, & certificates
+      const { error } = await supabase
+        .from('registrations')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (error) {
+        toast.error('Failed to delete registrations: ' + error.message);
+      } else {
+        toast.success('All registration records deleted successfully.');
+        setRegistrations([]);
+        setPage(1);
+      }
+    } catch (err) {
+      toast.error('An error occurred while deleting registrations.');
+      console.error(err);
+    } finally {
+      setDeletingAll(false);
+      setDeleteAllOpen(false);
+    }
+  };
 
   const filtered = registrations.filter((r) => {
     if (filterSession && r.session_id !== filterSession) return false;
@@ -100,6 +127,14 @@ export default function Registrations() {
           </button>
           <button className="btn-secondary" onClick={handleExportPDF} disabled={filtered.length === 0} title="Export PDF">
             <FileText size={16} /> PDF
+          </button>
+          <button
+            className="btn-danger flex items-center gap-1.5"
+            onClick={() => setDeleteAllOpen(true)}
+            disabled={registrations.length === 0 || deletingAll}
+            title="Delete all registration records"
+          >
+            <Trash2 size={16} /> Delete All Registrations
           </button>
         </div>
       </div>
@@ -228,6 +263,28 @@ export default function Registrations() {
             {saving ? <Spinner size="sm" /> : null}
             {saving ? 'Saving…' : actionTarget?.action === 'confirm' ? 'Confirm' : 'Cancel Registration'}
           </button>
+        </div>
+      </Modal>
+
+      {/* Delete All Confirmation Modal */}
+      <Modal isOpen={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} title="Delete All Registrations" size="sm">
+        <div className="space-y-4">
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+            <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="text-sm font-semibold text-red-900">Delete all registrations?</p>
+              <p className="text-xs text-red-700 mt-0.5">This action cannot be undone. This will delete ONLY registration records ({registrations.length} items). Student profiles and sessions will remain untouched.</p>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button className="btn-secondary flex-1" onClick={() => setDeleteAllOpen(false)} disabled={deletingAll}>
+              Cancel
+            </button>
+            <button className="btn-danger flex-1 flex items-center justify-center gap-1.5" onClick={handleDeleteAll} disabled={deletingAll}>
+              {deletingAll ? <Spinner size="sm" /> : <Trash2 size={16} />}
+              {deletingAll ? 'Deleting…' : 'Delete All'}
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

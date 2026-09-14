@@ -3,7 +3,7 @@ import { GraduationCap, QrCode } from 'lucide-react';
 
 /**
  * Printable/downloadable registration card
- * Ref is forwarded so parent can capture it with html2canvas
+ * Exact Physical Size: 8.5 cm × 5.5 cm (85mm × 55mm)
  */
 const RegistrationCard = forwardRef(function RegistrationCard(
   { student, session, registration, qrDataUrl },
@@ -15,85 +15,89 @@ const RegistrationCard = forwardRef(function RegistrationCard(
   return (
     <div
       ref={ref}
-      className="bg-white text-slate-900 rounded-2xl overflow-hidden shadow-2xl"
-      style={{ width: '400px', fontFamily: 'Inter, system-ui, sans-serif' }}
+      className="bg-white text-slate-900 rounded-xl overflow-hidden shadow-2xl flex flex-col justify-between border border-slate-300"
+      style={{
+        width: '8.5cm',
+        height: '5.5cm',
+        boxSizing: 'border-box',
+        fontFamily: 'Inter, system-ui, sans-serif',
+      }}
     >
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-700 to-blue-500 px-6 py-5 flex items-center gap-3">
-        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-          <GraduationCap size={22} className="text-white" />
-        </div>
-        <div>
-          <p className="text-xs text-blue-200 font-medium uppercase tracking-widest">Registration Card</p>
-          <p className="text-base font-bold text-white">{session?.name ?? 'Session'}</p>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="p-6 flex gap-4">
-        {/* Photo */}
-        <div className="flex-shrink-0">
-          {student?.photo_url ? (
-            <img
-              src={student.photo_url}
-              alt={student.name}
-              className="w-20 h-24 object-cover rounded-xl border-2 border-slate-200"
-              crossOrigin="anonymous"
-            />
-          ) : (
-            <div className="w-20 h-24 bg-slate-100 rounded-xl border-2 border-slate-200 flex items-center justify-center">
-              <GraduationCap size={28} className="text-slate-400" />
-            </div>
-          )}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <p className="text-lg font-bold text-slate-900 truncate">{student?.name}</p>
-          <p className="text-sm text-slate-500 mb-2 truncate">{student?.school_name}</p>
-          <div className="space-y-1">
-            <Row label="Gmail" value={emailVal} />
-            <Row label="City" value={cityVal} />
-            <Row label="Phone" value={student?.phone} />
-            <Row
-              label="Status"
-              value={
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  registration?.registration_status === 'confirmed'
-                    ? 'bg-green-100 text-green-700'
-                    : registration?.registration_status === 'cancelled'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-yellow-100 text-yellow-700'
-                }`}>
-                  {registration?.registration_status ?? 'pending'}
-                </span>
-              }
-            />
+      {/* Top Header - Official University Branding */}
+      <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-blue-800 text-white px-2.5 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="w-6.5 h-6.5 bg-white/20 rounded-md flex items-center justify-center flex-shrink-0">
+            <GraduationCap size={15} className="text-white" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-[10.5px] font-bold leading-tight truncate tracking-tight text-white">
+              Jaypee University of Engineering & Technology
+            </h2>
+            <p className="text-[8px] text-blue-200 font-medium leading-none tracking-tight mt-0.5">
+              Accredited Grade 'A+' by NAAC · Raghogarh, Guna (M.P.)
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Registration ID + QR */}
-      <div className="border-t border-dashed border-slate-200 px-6 py-4 flex items-center justify-between bg-slate-50">
+      {/* Program Sub-bar */}
+      <div className="bg-blue-50 px-2.5 py-0.5 border-b border-blue-100 flex items-center justify-start text-[8.5px] font-bold text-blue-900">
+        <span className="uppercase tracking-wider">Capacity Building Program</span>
+      </div>
+
+      {/* Body Content - 1/3 Photo Area & 2/3 Details Area */}
+      <div className="px-2.5 py-1 flex gap-2 flex-1 items-stretch min-h-0 w-full overflow-hidden">
+        {/* Photo Container - 1/3 Area, full height with slight top/bottom margin */}
+        <div className="w-1/3 self-stretch my-0.5 flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {student?.photo_url ? (
+            <img
+              src={student.photo_url}
+              alt={student.name}
+              className="w-full h-full object-cover rounded-lg border border-slate-300 shadow-sm"
+              crossOrigin="anonymous"
+            />
+          ) : (
+            <div className="w-full h-full bg-slate-100 rounded-lg border border-slate-300 flex items-center justify-center min-h-[60px]">
+              <GraduationCap size={24} className="text-slate-400" />
+            </div>
+          )}
+        </div>
+
+        {/* Info Grid Container - 2/3 Area */}
+        <div className="w-2/3 min-w-0 flex flex-col justify-center space-y-0.5 py-0.5">
+          <p className="text-[12px] font-bold text-slate-900 leading-snug truncate">{student?.name}</p>
+          <p className="text-[9.5px] text-slate-500 truncate leading-none mb-1">{student?.school_name}</p>
+          <div className="space-y-0.5 text-[9px] text-slate-700">
+            <div className="truncate"><span className="text-slate-400 font-medium">Mail:</span> {emailVal || '—'}</div>
+            <div className="truncate"><span className="text-slate-400 font-medium">Phone:</span> {student?.phone || '—'}</div>
+            <div className="flex items-center justify-between">
+              <span className="truncate"><span className="text-slate-400 font-medium">City:</span> {cityVal || '—'}</span>
+              <span className={`text-[7.5px] font-bold px-1.5 py-0.2 rounded ${
+                registration?.registration_status === 'confirmed'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-yellow-100 text-yellow-800'
+              }`}>
+                {registration?.registration_status ?? 'pending'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer / QR Code & Reg ID */}
+      <div className="bg-slate-50 px-2.5 py-1 border-t border-slate-200 flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Registration ID</p>
-          <p className="text-base font-bold text-slate-800 font-mono mt-0.5">
+          <p className="text-[7.5px] text-slate-400 uppercase font-medium tracking-wider">Registration ID</p>
+          <p className="text-[11px] font-bold text-slate-800 font-mono leading-tight">
             {registration?.registration_id}
           </p>
-          <p className="text-xs text-slate-400 mt-1">
-            {registration?.registered_at
-              ? new Date(registration.registered_at).toLocaleDateString('en-IN', {
-                  day: 'numeric', month: 'short', year: 'numeric',
-                })
-              : ''}
-          </p>
         </div>
-        <div>
+        <div className="flex items-center gap-1.5">
           {qrDataUrl ? (
-            <img src={qrDataUrl} alt="QR Code" className="w-16 h-16" />
+            <img src={qrDataUrl} alt="JUET QR Code" className="w-10 h-10 rounded border border-slate-200 bg-white p-0.5" />
           ) : (
-            <div className="w-16 h-16 bg-slate-200 rounded flex items-center justify-center">
-              <QrCode size={24} className="text-slate-400" />
+            <div className="w-10 h-10 bg-slate-200 rounded flex items-center justify-center">
+              <QrCode size={18} className="text-slate-400" />
             </div>
           )}
         </div>
@@ -101,14 +105,5 @@ const RegistrationCard = forwardRef(function RegistrationCard(
     </div>
   );
 });
-
-function Row({ label, value }) {
-  return (
-    <div className="flex items-center gap-1.5 text-xs">
-      <span className="text-slate-400 w-12 flex-shrink-0">{label}:</span>
-      <span className="text-slate-700 font-medium truncate">{value || '—'}</span>
-    </div>
-  );
-}
 
 export default RegistrationCard;

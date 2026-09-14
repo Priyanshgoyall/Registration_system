@@ -3,7 +3,7 @@ import { jsPDF } from 'jspdf';
 
 /**
  * Fetches an image URL and returns it as a base64 data URL.
- * This is needed to avoid CORS issues when rendering external images with html2canvas.
+ * Prevents CORS issues when rendering external images with html2canvas.
  */
 async function toBase64DataUrl(url) {
   try {
@@ -16,19 +16,19 @@ async function toBase64DataUrl(url) {
       reader.readAsDataURL(blob);
     });
   } catch {
-    return null; // fallback: use original URL (may fail in canvas)
+    return null;
   }
 }
 
 /**
  * Pre-processes the DOM element before capturing:
- * Converts all img src URLs to base64 data URLs to avoid CORS issues.
+ * Converts all img src URLs to base64 data URLs.
  */
 async function preFetchImages(element) {
   const imgs = element.querySelectorAll('img[src]');
   const promises = Array.from(imgs).map(async (img) => {
     const src = img.getAttribute('src');
-    if (!src || src.startsWith('data:')) return; // already base64
+    if (!src || src.startsWith('data:')) return;
     const base64 = await toBase64DataUrl(src);
     if (base64) {
       img.setAttribute('src', base64);
@@ -38,24 +38,22 @@ async function preFetchImages(element) {
 }
 
 /**
- * Captures a DOM element and downloads it as a PDF.
+ * Captures a DOM element and downloads it as an exact 8.5 cm x 5.5 cm PDF.
  * @param {HTMLElement} element - The element to capture
- * @param {string} filename - The output PDF filename (without extension)
+ * @param {string} filename - The output PDF filename
  */
 export async function downloadAsPDF(element, filename = 'registration-card') {
   try {
-    // Clone the element to avoid mutating the live DOM
     const clone = element.cloneNode(true);
     clone.style.position = 'absolute';
     clone.style.top = '-9999px';
     clone.style.left = '-9999px';
     document.body.appendChild(clone);
 
-    // Pre-fetch all images to avoid CORS issues
     await preFetchImages(clone);
 
     const canvas = await html2canvas(clone, {
-      scale: 2,
+      scale: 3,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
@@ -65,13 +63,14 @@ export async function downloadAsPDF(element, filename = 'registration-card') {
     document.body.removeChild(clone);
 
     const imgData = canvas.toDataURL('image/png');
+    // PDF dimensions: exact 85 mm width x 55 mm height (8.5 cm x 5.5 cm)
     const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'px',
-      format: [canvas.width / 2, canvas.height / 2],
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [85, 55],
     });
 
-    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
+    pdf.addImage(imgData, 'PNG', 0, 0, 85, 55);
     pdf.save(`${filename}.pdf`);
     return true;
   } catch (err) {

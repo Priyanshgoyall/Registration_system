@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import Spinner from './Spinner';
 
 export default function ProtectedRoute({ children }) {
-  const { session, loading } = useAuth();
+  const { session, loading, isAdmin } = useAuth();
 
   if (loading) {
     return (
@@ -13,7 +13,7 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  if (!session) {
+  if (!session || !isAdmin) {
     return <Navigate to="/admin/login" replace />;
   }
 

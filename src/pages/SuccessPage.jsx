@@ -23,8 +23,8 @@ export default function SuccessPage() {
       const { data: rpcReg, error: rpcError } = await supabase.rpc('get_registration_public', { p_reg_id: registrationId });
       if (!rpcError && rpcReg && rpcReg.id) {
         setData(rpcReg);
-        const verifyUrl = `${window.location.origin}/verify`;
-        const qr = await generateQRDataUrl(verifyUrl);
+        const qrUrl = 'https://www.juet.ac.in/';
+        const qr = await generateQRDataUrl(qrUrl);
         setQrDataUrl(qr);
         setLoading(false);
         return;
@@ -49,8 +49,8 @@ export default function SuccessPage() {
 
       setData(reg);
 
-      const verifyUrl = `${window.location.origin}/verify`;
-      const qr = await generateQRDataUrl(verifyUrl);
+      const qrUrl = 'https://www.juet.ac.in/';
+      const qr = await generateQRDataUrl(qrUrl);
       setQrDataUrl(qr);
 
       setLoading(false);
@@ -99,7 +99,7 @@ export default function SuccessPage() {
       </div>
 
       {/* Registration card */}
-      <div className="mb-8 shadow-lg rounded-2xl">
+      <div className="mb-8 shadow-lg rounded-2xl printable-card">
         <RegistrationCard
           ref={cardRef}
           student={data.students}
