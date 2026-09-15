@@ -25,10 +25,13 @@ const RegistrationCard = forwardRef(function RegistrationCard(
     >
       {/* Top Header - Official University Branding */}
       <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-blue-800 text-white px-2.5 py-1.5 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <div className="w-6.5 h-6.5 bg-white/20 rounded-md flex items-center justify-center flex-shrink-0">
-            <GraduationCap size={15} className="text-white" />
-          </div>
+        <div className="flex items-center gap-2 min-w-0">
+          <img
+            src="/juet-logo.png"
+            alt="JUET Logo"
+            className="w-7 h-7 object-contain flex-shrink-0 bg-white/95 rounded-md p-0.5 shadow-sm"
+            crossOrigin="anonymous"
+          />
           <div className="min-w-0">
             <h2 className="text-[10.5px] font-bold leading-tight truncate tracking-tight text-white">
               Jaypee University of Engineering & Technology
