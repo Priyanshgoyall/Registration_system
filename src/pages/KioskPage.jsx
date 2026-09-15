@@ -24,11 +24,11 @@ const STEPS = ['Session', 'Photo', 'Voice', 'Confirm'];
 
 // ─── Voice field sequence (order matters) ────────────────────────────────────
 const VOICE_FIELDS = [
-  { key: 'name',        label: 'Full Name',        icon: User,   placeholder: 'e.g. Priyansh Goyal',           hint: 'Say your full name (e.g. "My name is Priyansh Goyal")' },
-  { key: 'email',       label: 'Gmail ID / Email', icon: Mail,   placeholder: 'e.g. priyansh123@gmail.com',     hint: 'Say email (e.g. "priyansh 1 2 3 at the rate gmail dot com")' },
-  { key: 'phone',       label: 'Phone Number',     icon: Phone,  placeholder: 'e.g. 9876543210',               hint: 'Say 10 digit phone number clearly' },
-  { key: 'school_name', label: 'School Name',      icon: School, placeholder: 'e.g. Delhi Public School',      hint: 'Say your school or college name' },
-  { key: 'city',        label: 'City',             icon: MapPin, placeholder: 'e.g. Bhopal, New Delhi',         hint: 'Say your city name' },
+  { key: 'name', label: 'Full Name', icon: User, placeholder: 'e.g. Priyansh Goyal', hint: 'Say your full name (e.g. "My name is Priyansh Goyal")' },
+  { key: 'email', label: 'Gmail ID / Email', icon: Mail, placeholder: 'e.g. priyansh123@gmail.com', hint: 'Say email (e.g. "priyansh 1 2 3 at the rate gmail dot com")' },
+  { key: 'phone', label: 'Phone Number', icon: Phone, placeholder: 'e.g. 9876543210', hint: 'Say 10 digit phone number clearly' },
+  { key: 'school_name', label: 'School Name', icon: School, placeholder: 'e.g. Delhi Public School', hint: 'Say your school or college name' },
+  { key: 'city', label: 'City', icon: MapPin, placeholder: 'e.g. Bhopal, New Delhi', hint: 'Say your city name' },
 ];
 
 // ─── Voice state machine ──────────────────────────────────────────────────────
@@ -49,13 +49,12 @@ function StepIndicator({ step }) {
       {STEPS.map((label, i) => (
         <div key={label} className="flex items-center gap-2">
           <div className={`flex items-center gap-1.5 ${i <= step ? 'text-blue-600' : 'text-slate-400'}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border ${
-              i < step
-                ? 'bg-blue-600 border-blue-600 text-white'
-                : i === step
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border ${i < step
+              ? 'bg-blue-600 border-blue-600 text-white'
+              : i === step
                 ? 'border-blue-500 text-blue-600 bg-blue-50'
                 : 'border-slate-300 text-slate-400 bg-white'
-            }`}>
+              }`}>
               {i < step ? <CheckCircle size={14} /> : i + 1}
             </div>
             <span className="text-xs font-medium hidden sm:block">{label}</span>
@@ -113,6 +112,7 @@ export default function KioskPage() {
   // Active desk user calculation (coordDeskSession takes precedence, fallback to main auth if not logged out on desk)
   const isDeskLoggedOut = sessionStorage.getItem('coord_desk_logged_out') === 'true';
   const activeDeskUser = (!isDeskSessionExpired && coordDeskSession) || (!isDeskLoggedOut && session?.user ? {
+    id: session.user.id,
     email: session.user.email,
     full_name: profile?.full_name || session.user.email,
     role: profile?.role || 'admin',
@@ -322,11 +322,11 @@ export default function KioskPage() {
 
   // ─── Smart normalization per field ────────────────────────────────────────────
   const normalizeForField = useCallback((fieldKey, transcript) => {
-    if (fieldKey === 'name')        return normalizeName(transcript);
-    if (fieldKey === 'email')       return normalizeEmail(transcript);
-    if (fieldKey === 'phone')       return normalizePhone(transcript);
+    if (fieldKey === 'name') return normalizeName(transcript);
+    if (fieldKey === 'email') return normalizeEmail(transcript);
+    if (fieldKey === 'phone') return normalizePhone(transcript);
     if (fieldKey === 'school_name') return normalizeSchool(transcript);
-    if (fieldKey === 'city')        return normalizeCity(transcript);
+    if (fieldKey === 'city') return normalizeCity(transcript);
     return transcript;
   }, []);
 
@@ -594,11 +594,11 @@ export default function KioskPage() {
       }
 
       // Sanitize all text inputs before inserting into DB
-      const safeName      = sanitizeText(form.name);
-      const safeEmail     = emailClean;
-      const safePhone     = phoneDigits;
-      const safeSchool    = sanitizeText(form.school_name);
-      const safeCity      = sanitizeText(form.city);
+      const safeName = sanitizeText(form.name);
+      const safeEmail = emailClean;
+      const safePhone = phoneDigits;
+      const safeSchool = sanitizeText(form.school_name);
+      const safeCity = sanitizeText(form.city);
       const registrationId = generateRegistrationId();
 
       // 1. Try atomic register_student RPC function (bypasses RETURNING RLS permissions)
@@ -611,6 +611,7 @@ export default function KioskPage() {
         p_photo_url: photoUrl,
         p_session_id: form.sessionId,
         p_registration_id: registrationId,
+        p_coordinator_id: activeDeskUser?.id || null,
       });
 
       if (!rpcErr && rpcRes && rpcRes.success) {
@@ -662,6 +663,7 @@ export default function KioskPage() {
           city: safeCity,
           registration_id: registrationId,
           registration_status: 'confirmed',
+          coordinator_id: activeDeskUser?.id || null,
         })
         .select()
         .single();
@@ -686,11 +688,11 @@ export default function KioskPage() {
 
   const getMicLabel = () => {
     const field = VOICE_FIELDS[activeFieldIndex];
-    if (micState === MIC_STATE.LISTENING)   return `Listening for ${field?.label}…`;
-    if (micState === MIC_STATE.PROCESSING)  return `Processing…`;
-    if (micState === MIC_STATE.CAPTURED)    return `Got it! Moving to next…`;
-    if (micState === MIC_STATE.ERROR)       return `Retrying…`;
-    if (micState === MIC_STATE.COMPLETE)    return `All done! Reviewing…`;
+    if (micState === MIC_STATE.LISTENING) return `Listening for ${field?.label}…`;
+    if (micState === MIC_STATE.PROCESSING) return `Processing…`;
+    if (micState === MIC_STATE.CAPTURED) return `Got it! Moving to next…`;
+    if (micState === MIC_STATE.ERROR) return `Retrying…`;
+    if (micState === MIC_STATE.COMPLETE) return `All done! Reviewing…`;
     return 'Tap to start voice registration';
   };
 
@@ -713,12 +715,12 @@ export default function KioskPage() {
         <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
           <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center shadow-sm">
-                <GraduationCap size={24} className="text-white" />
+              <div className="w-10 h-10 rounded-2xl bg-white/95 border border-slate-200 flex items-center justify-center shadow-sm p-1">
+                <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Student Capacity Program</h1>
-                <p className="text-xs text-slate-400">Admission Counter & Kiosk System</p>
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Capacity Building Program</h1>
+                <p className="text-xs text-slate-400">Registration Counter & Kiosk System</p>
               </div>
             </div>
             <a
@@ -809,12 +811,12 @@ export default function KioskPage() {
       <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center shadow-sm">
-              <GraduationCap size={24} className="text-white" />
+            <div className="w-10 h-10 rounded-2xl bg-white/95 border border-slate-200 flex items-center justify-center shadow-sm p-1">
+              <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Student Capacity Program</h1>
-              <p className="text-xs text-slate-400 font-medium">National Science Innovation Program</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">CAPACITY BUILDING PROGRAMM</h1>
+              <p className="text-xs text-slate-400 font-medium">Registration Counter & Kiosk System</p>
             </div>
           </div>
 
@@ -860,8 +862,8 @@ export default function KioskPage() {
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
         {/* Fixed Info Sidebar — desktop only */}
         <aside className="hidden lg:flex flex-col justify-center bg-gradient-to-b from-blue-700 to-blue-800 text-white px-10 py-12 lg:w-80 xl:w-96 flex-shrink-0 h-full overflow-hidden">
-          <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-6">
-            <GraduationCap size={28} className="text-white" />
+          <div className="w-14 h-14 bg-white/95 rounded-2xl flex items-center justify-center mb-6 shadow-md p-1.5">
+            <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-2xl font-bold mb-3">Register for a Program</h2>
           <p className="text-blue-200 text-sm leading-relaxed mb-8">
@@ -875,9 +877,8 @@ export default function KioskPage() {
               { step: '4', label: 'Review & Submit', desc: 'Confirm and download card' },
             ].map(({ step: s, label, desc }) => (
               <div key={s} className="flex items-start gap-3">
-                <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mt-0.5 ${
-                  Number(s) <= step + 1 ? 'bg-white text-blue-700' : 'bg-blue-600/60 text-blue-200'
-                }`}>{s}</div>
+                <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mt-0.5 ${Number(s) <= step + 1 ? 'bg-white text-blue-700' : 'bg-blue-600/60 text-blue-200'
+                  }`}>{s}</div>
                 <div>
                   <p className={`text-sm font-semibold ${Number(s) <= step + 1 ? 'text-white' : 'text-blue-300'}`}>{label}</p>
                   <p className="text-xs text-blue-300">{desc}</p>
@@ -885,8 +886,11 @@ export default function KioskPage() {
               </div>
             ))}
           </div>
-          <div className="mt-10 pt-6 border-t border-blue-600/50">
-            <p className="text-xs text-blue-300">🔒 Data is securely stored in Supabase.</p>
+          <div className="mt-8 pt-5 border-t border-blue-600/40 text-xs text-blue-200/90 space-y-1">
+            <p className="font-bold text-white text-xs">Capacity Building Programm</p>
+            <p className="text-[11px] text-blue-200">Jaypee University of Engineering & Technology, Guna</p>
+            <p className="text-[10px] text-blue-300/80 pt-1">Designed & Developed by Priyansh goyal & Team</p>
+            <p className="text-[10px] text-blue-300/60">© {new Date().getFullYear()} Priyansh goyal. All Rights Reserved.</p>
           </div>
         </aside>
 
@@ -895,308 +899,303 @@ export default function KioskPage() {
           <div className="w-full max-w-xl">
             <StepIndicator step={step} />
 
-          <div className="card p-8 shadow-xl">
+            <div className="card p-8 shadow-xl">
 
-            {/* ── Step 0: Select Session ── */}
-            {step === 0 && (
-              <div className="space-y-6">
-                <div>
-                  <h1 className="text-2xl font-bold text-slate-900 mb-1">Select a Session</h1>
-                  <p className="text-slate-500 text-sm">Choose the active program session to register the student.</p>
-                </div>
-                {loadingSessions ? (
-                  <div className="flex justify-center py-10"><Spinner /></div>
-                ) : sessions.length === 0 ? (
-                  <div className="text-center py-10">
-                    <p className="text-slate-500 font-semibold">No active sessions available today.</p>
-                    <p className="text-slate-400 text-xs mt-1">Sessions expire automatically at 00:00 AM on their End Date.</p>
+              {/* ── Step 0: Select Session ── */}
+              {step === 0 && (
+                <div className="space-y-6">
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900 mb-1">Select a Session</h1>
+                    <p className="text-slate-500 text-sm">Choose the active program session to register the student.</p>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {sessions.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => setForm((f) => ({ ...f, sessionId: s.id }))}
-                        className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                          form.sessionId === s.id
-                            ? 'border-blue-500 bg-blue-50 text-slate-900'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="font-semibold">{s.name}</p>
-                          {form.sessionId === s.id && (
-                            <CheckCircle size={18} className="text-blue-600 flex-shrink-0" />
-                          )}
-                        </div>
-                        {s.description && <p className="text-sm text-slate-500 mt-0.5">{s.description}</p>}
-                        <p className="text-xs text-slate-400 mt-1">
-                          {new Date(s.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          {' — '}
-                          {new Date(s.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button
-                  className="btn-primary w-full"
-                  disabled={!form.sessionId}
-                  onClick={() => setStep(1)}
-                >
-                  Continue to Photo <ChevronRight size={16} />
-                </button>
-              </div>
-            )}
-
-            {/* ── Step 1: Photo ── */}
-            {step === 1 && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-1">Student Photo</h2>
-                  <p className="text-slate-500 text-sm">Take a photo for the student ID card (Optional).</p>
-                </div>
-
-                <div className="flex flex-col items-center gap-4">
-                  {photoDataUrl ? (
-                    <div className="relative">
-                      <img src={photoDataUrl} alt="Captured" className="w-44 h-52 object-cover rounded-2xl border-4 border-blue-500 shadow-md" />
-                      <span className="absolute bottom-2 right-2 bg-emerald-500 text-white p-1 rounded-full"><CheckCircle size={16} /></span>
-                    </div>
-                  ) : cameraEnabled ? (
-                    <div className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-slate-300 bg-black">
-                      <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-auto" />
+                  {loadingSessions ? (
+                    <div className="flex justify-center py-10"><Spinner /></div>
+                  ) : sessions.length === 0 ? (
+                    <div className="text-center py-10">
+                      <p className="text-slate-500 font-semibold">No active sessions available today.</p>
+                      <p className="text-slate-400 text-xs mt-1">Sessions expire automatically at 00:00 AM on their End Date.</p>
                     </div>
                   ) : (
-                    <div className="w-44 h-52 bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
-                      <Camera size={36} className="mb-2" />
-                      <span className="text-xs text-center px-4">Camera disabled</span>
+                    <div className="space-y-3">
+                      {sessions.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => setForm((f) => ({ ...f, sessionId: s.id }))}
+                          className={`w-full text-left p-4 rounded-xl border-2 transition-all ${form.sessionId === s.id
+                            ? 'border-blue-500 bg-blue-50 text-slate-900'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold">{s.name}</p>
+                            {form.sessionId === s.id && (
+                              <CheckCircle size={18} className="text-blue-600 flex-shrink-0" />
+                            )}
+                          </div>
+                          {s.description && <p className="text-sm text-slate-500 mt-0.5">{s.description}</p>}
+                          <p className="text-xs text-slate-400 mt-1">
+                            {new Date(s.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {' — '}
+                            {new Date(s.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    className="btn-primary w-full"
+                    disabled={!form.sessionId}
+                    onClick={() => setStep(1)}
+                  >
+                    Continue to Photo <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
+
+              {/* ── Step 1: Photo ── */}
+              {step === 1 && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-1">Student Photo</h2>
+                    <p className="text-slate-500 text-sm">Take a photo for the student ID card (Optional).</p>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-4">
+                    {photoDataUrl ? (
+                      <div className="relative">
+                        <img src={photoDataUrl} alt="Captured" className="w-44 h-52 object-cover rounded-2xl border-4 border-blue-500 shadow-md" />
+                        <span className="absolute bottom-2 right-2 bg-emerald-500 text-white p-1 rounded-full"><CheckCircle size={16} /></span>
+                      </div>
+                    ) : cameraEnabled ? (
+                      <div className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-slate-300 bg-black">
+                        <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-auto" />
+                      </div>
+                    ) : (
+                      <div className="w-44 h-52 bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
+                        <Camera size={36} className="mb-2" />
+                        <span className="text-xs text-center px-4">Camera disabled</span>
+                      </div>
+                    )}
+
+                    <div className="flex gap-3 flex-wrap justify-center">
+                      {!cameraEnabled && !photoDataUrl && (
+                        <button className="btn-primary" onClick={() => setCameraEnabled(true)}>
+                          <Camera size={16} /> Enable Camera
+                        </button>
+                      )}
+                      {cameraEnabled && !photoDataUrl && (
+                        <button className="btn-primary" onClick={capture}>
+                          <Camera size={16} /> Capture Photo
+                        </button>
+                      )}
+                      {photoDataUrl && (
+                        <button className="btn-secondary" onClick={retake}>
+                          <RefreshCw size={16} /> Retake
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <button className="btn-secondary" onClick={() => setStep(0)}>
+                      <ChevronLeft size={16} /> Back
+                    </button>
+                    <button className="btn-primary" onClick={() => { setActiveFieldIndex(0); setCapturedFields(new Set()); setMicState(MIC_STATE.IDLE); setStep(2); }}>
+                      {photoDataUrl ? 'Continue' : 'Skip Photo'} <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 2: Voice & Self Details Entry ── */}
+              {step === 2 && (
+                <div className="space-y-6">
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900 mb-1">Student Details</h2>
+                      <p className="text-slate-500 text-sm">
+                        Fill details below or tap the microphone to speak naturally.
+                      </p>
+                    </div>
+                    {photoDataUrl && (
+                      <img src={photoDataUrl} alt="Photo" className="w-12 h-14 object-cover rounded-lg border-2 border-blue-300 flex-shrink-0" />
+                    )}
+                  </div>
+
+                  {/* ── 1-Click Voice Assistant ── */}
+                  {speechSupported && (
+                    <div className="flex flex-col items-center gap-3 py-3 bg-blue-50/70 border border-blue-100 rounded-2xl p-4">
+                      <button
+                        type="button"
+                        onClick={startVoiceRegistration}
+                        className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 shadow-md ${isListening
+                          ? 'bg-red-500 text-white shadow-red-300 scale-105'
+                          : micState === MIC_STATE.COMPLETE
+                            ? 'bg-emerald-500 text-white shadow-emerald-200'
+                            : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
+                          }`}
+                      >
+                        {isListening ? <MicOff size={24} /> : <Mic size={24} />}
+                        {isListening && (
+                          <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-40" />
+                        )}
+                      </button>
+
+                      <p className={`text-xs font-semibold text-center ${isListening ? 'text-red-600' : micState === MIC_STATE.COMPLETE ? 'text-emerald-600' : 'text-slate-600'
+                        }`}>
+                        {getMicLabel()}
+                      </p>
                     </div>
                   )}
 
-                  <div className="flex gap-3 flex-wrap justify-center">
-                    {!cameraEnabled && !photoDataUrl && (
-                      <button className="btn-primary" onClick={() => setCameraEnabled(true)}>
-                        <Camera size={16} /> Enable Camera
-                      </button>
-                    )}
-                    {cameraEnabled && !photoDataUrl && (
-                      <button className="btn-primary" onClick={capture}>
-                        <Camera size={16} /> Capture Photo
-                      </button>
-                    )}
-                    {photoDataUrl && (
-                      <button className="btn-secondary" onClick={retake}>
-                        <RefreshCw size={16} /> Retake
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-between">
-                  <button className="btn-secondary" onClick={() => setStep(0)}>
-                    <ChevronLeft size={16} /> Back
-                  </button>
-                  <button className="btn-primary" onClick={() => { setActiveFieldIndex(0); setCapturedFields(new Set()); setMicState(MIC_STATE.IDLE); setStep(2); }}>
-                    {photoDataUrl ? 'Continue' : 'Skip Photo'} <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── Step 2: Voice & Self Details Entry ── */}
-            {step === 2 && (
-              <div className="space-y-6">
-                <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-1">Student Details</h2>
-                    <p className="text-slate-500 text-sm">
-                      Fill details below or tap the microphone to speak naturally.
-                    </p>
-                  </div>
-                  {photoDataUrl && (
-                    <img src={photoDataUrl} alt="Photo" className="w-12 h-14 object-cover rounded-lg border-2 border-blue-300 flex-shrink-0" />
-                  )}
-                </div>
-
-                {/* ── 1-Click Voice Assistant ── */}
-                {speechSupported && (
-                  <div className="flex flex-col items-center gap-3 py-3 bg-blue-50/70 border border-blue-100 rounded-2xl p-4">
-                    <button
-                      type="button"
-                      onClick={startVoiceRegistration}
-                      className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 shadow-md ${
-                        isListening
-                          ? 'bg-red-500 text-white shadow-red-300 scale-105'
-                          : micState === MIC_STATE.COMPLETE
-                          ? 'bg-emerald-500 text-white shadow-emerald-200'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
-                      }`}
-                    >
-                      {isListening ? <MicOff size={24} /> : <Mic size={24} />}
-                      {isListening && (
-                        <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-40" />
-                      )}
-                    </button>
-
-                    <p className={`text-xs font-semibold text-center ${
-                      isListening ? 'text-red-600' : micState === MIC_STATE.COMPLETE ? 'text-emerald-600' : 'text-slate-600'
-                    }`}>
-                      {getMicLabel()}
-                    </p>
-                  </div>
-                )}
-
-                {/* ── Prominent Large-Title Fields for Self Filling with Auto Scroll ── */}
-                <div className="space-y-6 pt-2">
-                  {VOICE_FIELDS.map((field, i) => {
-                    const isCurrent = i === activeFieldIndex;
-                    const isActiveListening = isCurrent && isListening;
-                    const isDone = capturedFields.has(field.key);
-                    const Icon = field.icon;
-                    return (
-                      <div
-                        key={field.key}
-                        ref={(el) => (fieldRefs.current[i] = el)}
-                        className={`p-4 rounded-2xl border transition-all duration-300 ${
-                          isActiveListening
+                  {/* ── Prominent Large-Title Fields for Self Filling with Auto Scroll ── */}
+                  <div className="space-y-6 pt-2">
+                    {VOICE_FIELDS.map((field, i) => {
+                      const isCurrent = i === activeFieldIndex;
+                      const isActiveListening = isCurrent && isListening;
+                      const isDone = capturedFields.has(field.key);
+                      const Icon = field.icon;
+                      return (
+                        <div
+                          key={field.key}
+                          ref={(el) => (fieldRefs.current[i] = el)}
+                          className={`p-4 rounded-2xl border transition-all duration-300 ${isActiveListening
                             ? 'bg-red-50/60 border-red-400 ring-2 ring-red-200 shadow-md'
                             : isCurrent
-                            ? 'bg-blue-50/50 border-blue-500 ring-2 ring-blue-200 shadow-md'
-                            : 'bg-slate-50/50 border-slate-200/80'
-                        }`}
-                      >
-                        {/* Prominent Large Title */}
-                        <label
-                          className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2 mb-2"
-                          htmlFor={`voice-${field.key}`}
+                              ? 'bg-blue-50/50 border-blue-500 ring-2 ring-blue-200 shadow-md'
+                              : 'bg-slate-50/50 border-slate-200/80'
+                            }`}
                         >
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                            isCurrent ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600'
-                          }`}>
-                            <Icon size={16} />
+                          {/* Prominent Large Title */}
+                          <label
+                            className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2 mb-2"
+                            htmlFor={`voice-${field.key}`}
+                          >
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isCurrent ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600'
+                              }`}>
+                              <Icon size={16} />
+                            </div>
+                            <span>{field.label} *</span>
+                            {isDone && <Check size={16} className="text-emerald-600 ml-auto" />}
+                          </label>
+
+                          <div className="relative">
+                            <input
+                              id={`voice-${field.key}`}
+                              className={
+                                isDone
+                                  ? 'w-full bg-emerald-50 border-2 border-emerald-400 rounded-xl px-4 py-3 text-slate-900 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all'
+                                  : isActiveListening
+                                    ? 'w-full bg-white border-2 border-red-400 rounded-xl px-4 py-3 text-slate-900 text-base font-medium focus:outline-none focus:ring-2 focus:ring-red-400 transition-all shadow-md'
+                                    : fieldErrors[field.key]
+                                      ? 'w-full bg-white border-2 border-red-400 rounded-xl px-4 py-3 text-slate-900 text-base focus:outline-none focus:ring-2 focus:ring-red-400 transition-all'
+                                      : 'w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-base placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all font-medium'
+                              }
+                              placeholder={isActiveListening ? `🎤 ${field.hint}` : field.placeholder}
+                              value={form[field.key]}
+                              onFocus={() => setActiveFieldIndex(i)}
+                              onChange={(e) => {
+                                setForm((f) => ({ ...f, [field.key]: e.target.value }));
+                                setFieldErrors((er) => ({ ...er, [field.key]: undefined }));
+                              }}
+                            />
+                            {speechSupported && isDone && !isListening && (
+                              <button
+                                type="button"
+                                title="Re-record voice for this field"
+                                onClick={() => retryField(i)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-blue-600 transition-colors"
+                              >
+                                <Mic size={16} />
+                              </button>
+                            )}
                           </div>
-                          <span>{field.label} *</span>
-                          {isDone && <Check size={16} className="text-emerald-600 ml-auto" />}
-                        </label>
-
-                        <div className="relative">
-                          <input
-                            id={`voice-${field.key}`}
-                            className={
-                              isDone
-                                ? 'w-full bg-emerald-50 border-2 border-emerald-400 rounded-xl px-4 py-3 text-slate-900 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all'
-                                : isActiveListening
-                                ? 'w-full bg-white border-2 border-red-400 rounded-xl px-4 py-3 text-slate-900 text-base font-medium focus:outline-none focus:ring-2 focus:ring-red-400 transition-all shadow-md'
-                                : fieldErrors[field.key]
-                                ? 'w-full bg-white border-2 border-red-400 rounded-xl px-4 py-3 text-slate-900 text-base focus:outline-none focus:ring-2 focus:ring-red-400 transition-all'
-                                : 'w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-base placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all font-medium'
-                            }
-                            placeholder={isActiveListening ? `🎤 ${field.hint}` : field.placeholder}
-                            value={form[field.key]}
-                            onFocus={() => setActiveFieldIndex(i)}
-                            onChange={(e) => {
-                              setForm((f) => ({ ...f, [field.key]: e.target.value }));
-                              setFieldErrors((er) => ({ ...er, [field.key]: undefined }));
-                            }}
-                          />
-                          {speechSupported && isDone && !isListening && (
-                            <button
-                              type="button"
-                              title="Re-record voice for this field"
-                              onClick={() => retryField(i)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-blue-600 transition-colors"
-                            >
-                              <Mic size={16} />
-                            </button>
-                          )}
+                          <FieldError message={fieldErrors[field.key]} />
+                          <p className="text-xs text-slate-400 mt-1.5 font-medium">{field.hint}</p>
                         </div>
-                        <FieldError message={fieldErrors[field.key]} />
-                        <p className="text-xs text-slate-400 mt-1.5 font-medium">{field.hint}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex justify-between pt-4">
-                  <button
-                    className="btn-secondary"
-                    onClick={() => { recognitionRef.current?.abort(); setMicState(MIC_STATE.IDLE); setStep(1); }}
-                  >
-                    <ChevronLeft size={16} /> Back
-                  </button>
-                  <button
-                    className="btn-primary"
-                    onClick={() => { if (validateDetails()) setStep(3); }}
-                  >
-                    Review Details <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── Step 3: Confirm & Submit ── */}
-            {step === 3 && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-1">Confirm Registration</h2>
-                  <p className="text-slate-500 text-sm">Review details — click any row to modify manually.</p>
-                </div>
-
-                {photoDataUrl && (
-                  <div className="flex justify-center">
-                    <img
-                      src={photoDataUrl}
-                      alt="Student"
-                      className="w-20 h-24 object-cover rounded-xl border-2 border-blue-300 shadow-sm"
-                    />
+                      );
+                    })}
                   </div>
-                )}
 
-                <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-200">
-                  <ConfirmRow label="Session" value={selectedSession?.name} readOnly />
-                  {VOICE_FIELDS.map((field) => (
-                    <EditableConfirmRow
-                      key={field.key}
-                      label={field.label}
-                      fieldKey={field.key}
-                      value={form[field.key]}
-                      icon={field.icon}
-                      editing={editingField === field.key}
-                      error={fieldErrors[field.key]}
-                      onEdit={() => setEditingField(field.key)}
-                      onSave={(val) => {
-                        setForm((f) => ({ ...f, [field.key]: val }));
-                        setFieldErrors((e) => ({ ...e, [field.key]: undefined }));
-                        setEditingField(null);
-                      }}
-                      onCancel={() => setEditingField(null)}
-                    />
-                  ))}
-                  <ConfirmRow label="Photo" value={photoDataUrl ? '✓ Captured' : 'None (optional)'} readOnly />
+                  <div className="flex justify-between pt-4">
+                    <button
+                      className="btn-secondary"
+                      onClick={() => { recognitionRef.current?.abort(); setMicState(MIC_STATE.IDLE); setStep(1); }}
+                    >
+                      <ChevronLeft size={16} /> Back
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={() => { if (validateDetails()) setStep(3); }}
+                    >
+                      Review Details <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
+              )}
 
-                <div className="flex gap-3">
-                  <button
-                    className="btn-secondary flex-1"
-                    onClick={() => { setEditingField(null); setStep(2); }}
-                    disabled={submitting}
-                  >
-                    <ChevronLeft size={16} /> Edit
-                  </button>
-                  <button
-                    className="btn-primary flex-1"
-                    onClick={handleSubmit}
-                    disabled={submitting || !!editingField}
-                  >
-                    {submitting ? <Spinner size="sm" /> : <CheckCircle size={16} />}
-                    {submitting ? 'Submitting…' : 'Confirm & Submit'}
-                  </button>
+              {/* ── Step 3: Confirm & Submit ── */}
+              {step === 3 && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-1">Confirm Registration</h2>
+                    <p className="text-slate-500 text-sm">Review details — click any row to modify manually.</p>
+                  </div>
+
+                  {photoDataUrl && (
+                    <div className="flex justify-center">
+                      <img
+                        src={photoDataUrl}
+                        alt="Student"
+                        className="w-20 h-24 object-cover rounded-xl border-2 border-blue-300 shadow-sm"
+                      />
+                    </div>
+                  )}
+
+                  <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-200">
+                    <ConfirmRow label="Session" value={selectedSession?.name} readOnly />
+                    {VOICE_FIELDS.map((field) => (
+                      <EditableConfirmRow
+                        key={field.key}
+                        label={field.label}
+                        fieldKey={field.key}
+                        value={form[field.key]}
+                        icon={field.icon}
+                        editing={editingField === field.key}
+                        error={fieldErrors[field.key]}
+                        onEdit={() => setEditingField(field.key)}
+                        onSave={(val) => {
+                          setForm((f) => ({ ...f, [field.key]: val }));
+                          setFieldErrors((e) => ({ ...e, [field.key]: undefined }));
+                          setEditingField(null);
+                        }}
+                        onCancel={() => setEditingField(null)}
+                      />
+                    ))}
+                    <ConfirmRow label="Photo" value={photoDataUrl ? '✓ Captured' : 'None (optional)'} readOnly />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      className="btn-secondary flex-1"
+                      onClick={() => { setEditingField(null); setStep(2); }}
+                      disabled={submitting}
+                    >
+                      <ChevronLeft size={16} /> Edit
+                    </button>
+                    <button
+                      className="btn-primary flex-1"
+                      onClick={handleSubmit}
+                      disabled={submitting || !!editingField}
+                    >
+                      {submitting ? <Spinner size="sm" /> : <CheckCircle size={16} />}
+                      {submitting ? 'Submitting…' : 'Confirm & Submit'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
         </div>
       </main>
 

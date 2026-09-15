@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   UserCog, Plus, Eye, EyeOff, RefreshCw, ShieldOff, Shield, AlertTriangle, Trash2,
+  ClipboardList, Search, Calendar, Clock, User, CheckCircle2, XCircle, FileText,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { supabaseAdmin, isAdminAvailable, hasServiceKey } from '../../lib/supabaseAdmin';
@@ -10,37 +11,29 @@ import { useAuth } from '../../hooks/useAuth';
 import Modal from '../../components/Modal';
 import Spinner from '../../components/Spinner';
 
-// ── Coordinator Management ────────────────────────────────────────────────────
-// Uses Supabase Auth admin API (service role) to create coordinator accounts.
-// Coordinators are stored in a `user_profiles` table: { id, email, full_name, role, is_active }
-// RLS: main admin can read/update all profiles; coordinators see only their own.
-//
-// Required Supabase setup:
-//   CREATE TABLE user_profiles (
-//     id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-//     email text NOT NULL,
-//     full_name text DEFAULT '',
-//     role text NOT NULL DEFAULT 'coordinator',
-//     is_active boolean NOT NULL DEFAULT true,
-//     created_at timestamptz NOT NULL DEFAULT now()
-//   );
-//   ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-//   CREATE POLICY "Admin sees all" ON user_profiles FOR ALL USING (auth.uid() IN (
-//     SELECT id FROM user_profiles WHERE role = 'admin'
-//   ));
-//   CREATE POLICY "Coordinator sees own" ON user_profiles FOR SELECT USING (auth.uid() = id);
+// ── Coordinator Management & Audit System ─────────────────────────────────────
+// Displays coordinator accounts, activity statistics, real DB timestamps, and
+// coordinator-specific registration history.
+// Accessible exclusively by Main Admin users.
 
 const emptyForm = { full_name: '', email: '', password: '' };
 
 function roleBadge(role, isActive) {
-  if (!isActive) return <span className="badge-red">Disabled</span>;
-  if (role === 'admin') return <span className="badge-blue">Admin</span>;
-  return <span className="badge-green">Coordinator</span>;
+  if (!isActive) return <span className="badge-red">Inactive</span>;
+  if (role === 'admin') return <span className="badge-blue">Main Admin</span>;
+  return <span className="badge-green">Active Coordinator</span>;
+}
+
+function statusBadge(status) {
+  if (status === 'confirmed') return <span className="badge-green">Confirmed</span>;
+  if (status === 'cancelled') return <span className="badge-red">Cancelled</span>;
+  return <span className="badge-yellow">Pending</span>;
 }
 
 export default function Coordinators() {
   const { isAdmin, loading: authLoading } = useAuth();
   const [profiles, setProfiles] = useState([]);
+  const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tableMissing, setTableMissing] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -50,6 +43,10 @@ export default function Coordinators() {
   const [resetTarget, setResetTarget] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
+
+  // ── History Modal State ──
+  const [historyTarget, setHistoryTarget] = useState(null);
+  const [historySearch, setHistorySearch] = useState('');
 
   if (!authLoading && !isAdmin) {
     return <Navigate to="/admin/dashboard" replace />;
@@ -65,41 +62,49 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS coordinator_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "auth_all_user_profiles" ON public.user_profiles
-  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);`;
 
-CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
-  FOR SELECT TO anon USING (true);`;
-
-  const fetchProfiles = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const [{ data: profs, error: profErr }, { data: regs, error: regErr }] = await Promise.all([
+      supabase.from('user_profiles').select('*').order('created_at', { ascending: false }),
+      supabase
+        .from('registrations')
+        .select('id, registration_id, registered_at, registration_status, class, coordinator_id, student_id, students(name, email, phone, school_name, city), sessions(name)')
+        .order('registered_at', { ascending: false }),
+    ]);
 
-    if (error) {
+    if (profErr) {
       if (
-        error.code === 'PGRST204' ||
-        error.code === '42P01' ||
-        error.message?.toLowerCase().includes('schema cache') ||
-        error.message?.toLowerCase().includes('relation') ||
-        error.message?.toLowerCase().includes('not found')
+        profErr.code === 'PGRST204' ||
+        profErr.code === '42P01' ||
+        profErr.message?.toLowerCase().includes('schema cache') ||
+        profErr.message?.toLowerCase().includes('relation') ||
+        profErr.message?.toLowerCase().includes('not found')
       ) {
         setTableMissing(true);
       } else {
-        toast.error('Failed to load coordinators: ' + error.message);
+        toast.error('Failed to load coordinators: ' + profErr.message);
       }
     } else {
-      setProfiles(data ?? []);
+      setProfiles(profs ?? []);
       setTableMissing(false);
+    }
+
+    if (!regErr) {
+      setRegistrations(regs ?? []);
     }
     setLoading(false);
   };
 
-  useEffect(() => { fetchProfiles(); }, []);
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -114,17 +119,15 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
     setSaving(true);
     try {
       const emailClean = form.email.trim().toLowerCase();
-      // Check if profile already exists in current active list
       const existingProfile = profiles.find((p) => p.email.toLowerCase() === emailClean);
       if (existingProfile) {
-        toast.error(`An account for ${emailClean} already exists in the list below.`);
+        toast.error(`An account for ${emailClean} already exists.`);
         setSaving(false);
         return;
       }
 
       let createdUserId;
       if (hasServiceKey && supabaseAdmin?.auth?.admin) {
-        // 1. Try creating auth user via service role
         const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
           email: emailClean,
           password: form.password,
@@ -132,13 +135,11 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
         });
 
         if (authErr) {
-          // If already registered in auth, look up user ID and link profile
           if (authErr.message?.toLowerCase().includes('already') || authErr.status === 422) {
             const { data: usersData } = await supabaseAdmin.auth.admin.listUsers();
             const existingUser = usersData?.users?.find((u) => u.email?.toLowerCase() === emailClean);
             if (existingUser) {
               createdUserId = existingUser.id;
-              // update user password to the new password entered
               await supabaseAdmin.auth.admin.updateUserById(createdUserId, { password: form.password });
             } else {
               throw new Error(authErr.message);
@@ -150,14 +151,13 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
           createdUserId = authData.user.id;
         }
       } else {
-        // Fallback using normal supabase auth sign up
         const { data: authData, error: authErr } = await supabase.auth.signUp({
           email: emailClean,
           password: form.password,
         });
         if (authErr) {
           if (authErr.message?.toLowerCase().includes('already')) {
-            throw new Error(`The email "${emailClean}" is already registered. Please enter a different email address or reset password.`);
+            throw new Error(`The email "${emailClean}" is already registered.`);
           }
           throw new Error(authErr.message);
         }
@@ -165,7 +165,6 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
         createdUserId = authData.user.id;
       }
 
-      // 2. Insert/Upsert into user_profiles
       const { error: profileErr } = await supabase.from('user_profiles').upsert({
         id: createdUserId,
         email: emailClean,
@@ -178,7 +177,7 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
       toast.success(`Coordinator ${emailClean} created successfully!`);
       setCreateOpen(false);
       setForm(emptyForm);
-      fetchProfiles();
+      fetchData();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -193,7 +192,7 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
       .eq('id', profile.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`Account ${profile.is_active ? 'disabled' : 'enabled'}`);
-    fetchProfiles();
+    fetchData();
   };
 
   const handleDelete = async (profile) => {
@@ -205,7 +204,7 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
       const { error } = await supabase.from('user_profiles').delete().eq('id', profile.id);
       if (error) throw new Error(error.message);
       toast.success(`Coordinator ${profile.email} removed`);
-      fetchProfiles();
+      fetchData();
     } catch (err) {
       toast.error(err.message);
     }
@@ -237,6 +236,18 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
     }
   };
 
+  // Helper to compute stats for each coordinator
+  const getCoordinatorStats = (coordId) => {
+    const coordRegs = registrations.filter((r) => r.coordinator_id === coordId);
+    const count = coordRegs.length;
+    const latestReg = coordRegs.length > 0 ? coordRegs[0] : null;
+    return {
+      total: count,
+      latestTimestamp: latestReg ? latestReg.registered_at : null,
+      regs: coordRegs,
+    };
+  };
+
   if (!isAdminAvailable) {
     return (
       <div className="space-y-6 animate-fade-in">
@@ -252,17 +263,7 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
             <div>
               <p className="text-lg font-bold text-slate-900 mb-2">Service Key Required</p>
               <p className="text-slate-500 text-sm max-w-md">
-                Coordinator account creation requires the Supabase service role key.
-                Add it to your <span className="font-mono bg-slate-100 px-1 rounded">.env</span> file:
-              </p>
-              <div className="mt-4 bg-slate-900 text-emerald-400 rounded-xl p-4 text-left text-sm font-mono">
-                <p className="text-slate-500 mb-1"># .env</p>
-                <p>VITE_SUPABASE_URL=your_project_url</p>
-                <p>VITE_SUPABASE_ANON_KEY=your_anon_key</p>
-                <p className="text-emerald-400">VITE_SUPABASE_SERVICE_KEY=your_service_role_key</p>
-              </div>
-              <p className="text-slate-400 text-xs mt-3">
-                Get the service role key from: Supabase Dashboard → Project Settings → API → service_role
+                Coordinator account creation requires the Supabase service role key in <span className="font-mono bg-slate-100 px-1 rounded">.env</span>.
               </p>
             </div>
           </div>
@@ -286,7 +287,6 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
             <div className="w-full max-w-2xl">
               <p className="text-lg font-bold text-slate-900 mb-2">Database Table Required: user_profiles</p>
               <p className="text-slate-500 text-sm mb-4">
-                The <span className="font-mono bg-slate-100 px-1 rounded text-slate-900 font-semibold">user_profiles</span> table does not exist in your Supabase project schema cache yet.
                 Run the SQL query below in your <strong className="text-slate-800">Supabase Dashboard → SQL Editor</strong> to create it:
               </p>
 
@@ -304,7 +304,7 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
               </div>
 
               <div className="flex justify-center gap-3">
-                <button className="btn-primary" onClick={fetchProfiles}>
+                <button className="btn-primary" onClick={fetchData}>
                   <RefreshCw size={14} /> Refresh / Check Table
                 </button>
               </div>
@@ -315,115 +315,296 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
     );
   }
 
+  // History filtering for active target
+  const targetRegs = historyTarget
+    ? registrations.filter((r) => r.coordinator_id === historyTarget.id)
+    : [];
+  const filteredHistory = targetRegs.filter((r) => {
+    if (!historySearch.trim()) return true;
+    const q = historySearch.toLowerCase();
+    return (
+      r.registration_id?.toLowerCase().includes(q) ||
+      r.students?.name?.toLowerCase().includes(q) ||
+      r.students?.school_name?.toLowerCase().includes(q) ||
+      r.students?.phone?.includes(q)
+    );
+  });
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Coordinators</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Manage coordinator accounts and permissions.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Coordinator Management</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Track coordinator activity, registration ownership, and metrics.</p>
         </div>
-        <button className="btn-primary" onClick={() => setCreateOpen(true)}>
-          <Plus size={16} /> New Coordinator
-        </button>
+        <div className="flex items-center gap-2">
+          <button className="btn-secondary" onClick={fetchData} title="Refresh data">
+            <RefreshCw size={15} />
+          </button>
+          <button className="btn-primary" onClick={() => setCreateOpen(true)}>
+            <Plus size={16} /> New Coordinator
+          </button>
+        </div>
       </div>
 
-      {/* Info card */}
+      {/* Role Hierarchy Note */}
       <div className="bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4 flex gap-3">
         <Shield size={18} className="text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-sm">
-          <p className="font-semibold text-blue-800 mb-0.5">Role Hierarchy</p>
+          <p className="font-semibold text-blue-800 mb-0.5">Registration Ownership & Hierarchy</p>
           <p className="text-blue-700">
-            <strong>Main Admin</strong> has full access. <strong>Coordinators</strong> can view registrations,
-            mark attendance, and issue certificates — but cannot manage coordinators or delete data.
+            Registrations created by authenticated coordinators are automatically tagged with their unique Supabase user ID.
+            Click on any coordinator row or registration count to inspect their complete registration history.
           </p>
         </div>
       </div>
 
-      {/* Table */}
+      {/* Coordinators Table */}
       <div className="card overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : profiles.length === 0 ? (
           <div className="text-center py-12">
             <UserCog size={40} className="text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">No coordinator accounts yet.</p>
-            <p className="text-slate-400 text-sm mt-1">Create one to delegate access.</p>
+            <p className="text-slate-500 font-medium">No coordinator accounts found.</p>
+            <p className="text-slate-400 text-sm mt-1">Create coordinator accounts to assign desk registrations.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
-                  <th className="table-header">Name / Email</th>
-                  <th className="table-header">Role</th>
-                  <th className="table-header hidden sm:table-cell">Created</th>
+                  <th className="table-header">Coordinator Name & Email</th>
+                  <th className="table-header">Status</th>
+                  <th className="table-header">Registrations Handled</th>
+                  <th className="table-header hidden md:table-cell">Account Created</th>
+                  <th className="table-header hidden lg:table-cell">Last Activity</th>
                   <th className="table-header text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {profiles.map((p) => (
-                  <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
-                    <td className="table-cell">
-                      <p className="font-semibold text-slate-900">{p.full_name || '—'}</p>
-                      <p className="text-xs text-slate-400">{p.email}</p>
-                    </td>
-                    <td className="table-cell">{roleBadge(p.role, p.is_active)}</td>
-                    <td className="table-cell hidden sm:table-cell text-xs text-slate-400">
-                      {new Date(p.created_at).toLocaleDateString('en-IN')}
-                    </td>
-                    <td className="table-cell">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* Reset password */}
+                {profiles.map((p) => {
+                  const stats = getCoordinatorStats(p.id);
+                  return (
+                    <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
+                      <td className="table-cell">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                            {(p.full_name || p.email || 'C')[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-900">{p.full_name || '—'}</p>
+                            <p className="text-xs text-slate-400 font-mono">{p.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="table-cell">{roleBadge(p.role, p.is_active)}</td>
+                      <td className="table-cell">
                         <button
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
-                          title="Reset Password"
-                          onClick={() => { setResetTarget(p); setNewPassword(''); }}
+                          onClick={() => { setHistoryTarget(p); setHistorySearch(''); }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs rounded-full transition-all border border-blue-200/60"
+                          title="Click to view coordinator registration history"
                         >
-                          <RefreshCw size={14} />
+                          <ClipboardList size={13} />
+                          {stats.total} {stats.total === 1 ? 'registration' : 'registrations'}
                         </button>
-                        {/* Toggle active */}
-                        {p.role !== 'admin' && (
-                          <>
-                            <button
-                              className={`p-1.5 rounded-lg transition-all ${
-                                p.is_active
-                                  ? 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'
-                                  : 'text-emerald-500 hover:bg-emerald-50'
-                              }`}
-                              title={p.is_active ? 'Disable Account' : 'Enable Account'}
-                              onClick={() => toggleActive(p)}
-                            >
-                              {p.is_active ? <ShieldOff size={14} /> : <Shield size={14} />}
-                            </button>
-                            <button
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all"
-                              title="Delete Coordinator Account"
-                              onClick={() => handleDelete(p)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </>
+                      </td>
+                      <td className="table-cell hidden md:table-cell text-xs text-slate-500">
+                        {new Date(p.created_at).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </td>
+                      <td className="table-cell hidden lg:table-cell text-xs text-slate-500">
+                        {stats.latestTimestamp ? (
+                          <span className="flex items-center gap-1 text-slate-700">
+                            <Clock size={12} className="text-slate-400" />
+                            {new Date(stats.latestTimestamp).toLocaleString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">No activity recorded</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="table-cell">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* View History button */}
+                          <button
+                            className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all flex items-center gap-1 text-xs font-semibold px-2 border border-blue-200"
+                            title="View Registration History"
+                            onClick={() => { setHistoryTarget(p); setHistorySearch(''); }}
+                          >
+                            <ClipboardList size={14} />
+                            <span>History</span>
+                          </button>
+                          {/* Reset password */}
+                          <button
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                            title="Reset Password"
+                            onClick={() => { setResetTarget(p); setNewPassword(''); }}
+                          >
+                            <RefreshCw size={14} />
+                          </button>
+                          {/* Toggle active */}
+                          {p.role !== 'admin' && (
+                            <>
+                              <button
+                                className={`p-1.5 rounded-lg transition-all ${
+                                  p.is_active
+                                    ? 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'
+                                    : 'text-emerald-500 hover:bg-emerald-50'
+                                }`}
+                                title={p.is_active ? 'Disable Account' : 'Enable Account'}
+                                onClick={() => toggleActive(p)}
+                              >
+                                {p.is_active ? <ShieldOff size={14} /> : <Shield size={14} />}
+                              </button>
+                              <button
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                                title="Delete Coordinator Account"
+                                onClick={() => handleDelete(p)}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
+      {/* Registration History Modal */}
+      <Modal
+        isOpen={!!historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        title={`Coordinator Registrations: ${historyTarget?.full_name || historyTarget?.email || ''}`}
+        size="lg"
+      >
+        <div className="space-y-4">
+          {/* Header Summary */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div>
+              <p className="font-bold text-slate-900 text-base">{historyTarget?.full_name || 'Coordinator'}</p>
+              <p className="text-xs text-slate-500 font-mono mt-0.5">{historyTarget?.email}</p>
+              <p className="text-xs text-slate-400 mt-1 font-mono">ID: {historyTarget?.id}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-semibold text-xs flex items-center gap-1 border border-blue-200">
+                <ClipboardList size={13} />
+                {targetRegs.length} Total Handled
+              </span>
+              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full font-semibold text-xs flex items-center gap-1 border border-emerald-200">
+                <CheckCircle2 size={13} />
+                {targetRegs.filter((r) => r.registration_status === 'confirmed').length} Confirmed
+              </span>
+            </div>
+          </div>
+
+          {/* Search inside History */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              className="input-field pl-10 text-sm"
+              placeholder="Filter by student name, school, phone, or ID..."
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+            />
+          </div>
+
+          {/* Registrations List */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[420px] overflow-y-auto">
+            {filteredHistory.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                <FileText size={36} className="mx-auto mb-2 text-slate-300" />
+                <p className="font-medium text-slate-600">No registrations found</p>
+                <p className="text-xs mt-1">
+                  {targetRegs.length === 0
+                    ? 'This coordinator has not created any student registrations yet.'
+                    : 'No registrations match your search criteria.'}
+                </p>
+              </div>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3">Registration ID</th>
+                    <th className="px-4 py-3">Student Name</th>
+                    <th className="px-4 py-3">School / Phone</th>
+                    <th className="px-4 py-3">Session</th>
+                    <th className="px-4 py-3">Date & Time</th>
+                    <th className="px-4 py-3 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredHistory.map((r) => (
+                    <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-blue-600">{r.registration_id}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{r.students?.name || '—'}</td>
+                      <td className="px-4 py-3 text-slate-500">
+                        <p className="font-medium text-slate-700">{r.students?.school_name || '—'}</p>
+                        <p className="text-[11px] text-slate-400 font-mono">{r.students?.phone}</p>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{r.sessions?.name || 'Default Session'}</td>
+                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                        {new Date(r.registered_at).toLocaleString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="px-4 py-3 text-right">{statusBadge(r.registration_status)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button className="btn-secondary" onClick={() => setHistoryTarget(null)}>
+              Close History
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Create Coordinator Modal */}
       <Modal isOpen={createOpen} onClose={() => setCreateOpen(false)} title="Create Coordinator Account" size="sm">
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
             <label className="label">Full Name</label>
-            <input className="input-field" placeholder="e.g. Priya Sharma" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} required />
+            <input
+              className="input-field"
+              placeholder="e.g. Priya Sharma"
+              value={form.full_name}
+              onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+              required
+            />
           </div>
           <div>
             <label className="label">Email Address</label>
-            <input className="input-field" type="email" placeholder="coordinator@example.com" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
+            <input
+              className="input-field"
+              type="email"
+              placeholder="coordinator@example.com"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              required
+            />
           </div>
           <div>
             <label className="label">Password</label>
@@ -437,16 +618,22 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
                 required
                 minLength={8}
               />
-              <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" onClick={() => setShowPass((v) => !v)}>
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                onClick={() => setShowPass((v) => !v)}
+              >
                 {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
-            <strong>Note:</strong> The coordinator will be able to log in at the same admin URL with these credentials. They will not have access to coordinator management.
+            <strong>Note:</strong> The coordinator can log in to desk/admin. Registrations created by this account will automatically be attributed to them.
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" className="btn-secondary flex-1" onClick={() => setCreateOpen(false)}>Cancel</button>
+            <button type="button" className="btn-secondary flex-1" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </button>
             <button type="submit" className="btn-primary flex-1" disabled={saving}>
               {saving ? <Spinner size="sm" /> : <Plus size={14} />}
               {saving ? 'Creating…' : 'Create Account'}
@@ -473,7 +660,9 @@ CREATE POLICY "anon_read_user_profiles" ON public.user_profiles
             />
           </div>
           <div className="flex gap-3">
-            <button className="btn-secondary flex-1" onClick={() => setResetTarget(null)}>Cancel</button>
+            <button className="btn-secondary flex-1" onClick={() => setResetTarget(null)}>
+              Cancel
+            </button>
             <button className="btn-primary flex-1" onClick={handleResetPassword} disabled={resetting}>
               {resetting ? <Spinner size="sm" /> : <RefreshCw size={14} />}
               {resetting ? 'Resetting…' : 'Reset Password'}

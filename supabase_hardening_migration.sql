@@ -225,6 +225,9 @@ $$;
 GRANT EXECUTE ON FUNCTION public.check_existing_registration(text, text, uuid) TO anon, authenticated;
 
 
+-- 1. Ensure user_profiles table exists and registrations has coordinator_id
+ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS coordinator_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+
 -- Atomic Student Registration RPC
 CREATE OR REPLACE FUNCTION public.register_student(
   p_name text,
@@ -234,7 +237,8 @@ CREATE OR REPLACE FUNCTION public.register_student(
   p_city text,
   p_photo_url text,
   p_session_id uuid,
-  p_registration_id text
+  p_registration_id text,
+  p_coordinator_id uuid DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -248,8 +252,8 @@ BEGIN
   VALUES (p_name, p_email, p_phone, p_school_name, p_city, p_photo_url)
   RETURNING id INTO v_student_id;
 
-  INSERT INTO public.registrations (student_id, session_id, class, email, city, registration_id, registration_status)
-  VALUES (v_student_id, p_session_id, p_email, p_email, p_city, p_registration_id, 'confirmed')
+  INSERT INTO public.registrations (student_id, session_id, class, email, city, registration_id, registration_status, coordinator_id)
+  VALUES (v_student_id, p_session_id, p_email, p_email, p_city, p_registration_id, 'confirmed', p_coordinator_id)
   RETURNING id INTO v_reg_id;
 
   RETURN jsonb_build_object(
@@ -264,7 +268,7 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $$;
-GRANT EXECUTE ON FUNCTION public.register_student(text, text, text, text, text, text, uuid, text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.register_student(text, text, text, text, text, text, uuid, text, uuid) TO anon, authenticated;
 
 
 -- Coordinator Account Pre-Check RPC
@@ -306,6 +310,7 @@ GRANT EXECUTE ON FUNCTION public.check_coordinator_profile(text) TO anon, authen
 CREATE INDEX IF NOT EXISTS idx_registrations_student_id ON public.registrations(student_id);
 CREATE INDEX IF NOT EXISTS idx_registrations_session_id ON public.registrations(session_id);
 CREATE INDEX IF NOT EXISTS idx_registrations_status ON public.registrations(registration_status);
+CREATE INDEX IF NOT EXISTS idx_registrations_coordinator_id ON public.registrations(coordinator_id);
 
 CREATE INDEX IF NOT EXISTS idx_students_phone ON public.students(phone);
 CREATE INDEX IF NOT EXISTS idx_students_email ON public.students(email);
