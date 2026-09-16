@@ -601,8 +601,8 @@ export default function KioskPage() {
       const safeCity = sanitizeText(form.city);
       const registrationId = generateRegistrationId();
 
-      // 1. Try atomic register_student RPC function (bypasses RETURNING RLS permissions)
-      const { data: rpcRes, error: rpcErr } = await supabase.rpc('register_student', {
+      // 1. Try atomic register_student RPC function (with p_coordinator_id)
+      let { data: rpcRes, error: rpcErr } = await supabase.rpc('register_student', {
         p_name: safeName,
         p_email: safeEmail,
         p_phone: safePhone,
@@ -614,48 +614,68 @@ export default function KioskPage() {
         p_coordinator_id: activeDeskUser?.id || null,
       });
 
+      // If RPC failed due to signature mismatch, retry without p_coordinator_id
+      if (rpcErr) {
+        const retryRpc = await supabase.rpc('register_student', {
+          p_name: safeName,
+          p_email: safeEmail,
+          p_phone: safePhone,
+          p_school_name: safeSchool,
+          p_city: safeCity,
+          p_photo_url: photoUrl,
+          p_session_id: form.sessionId,
+          p_registration_id: registrationId,
+        });
+        if (!retryRpc.error && retryRpc.data) {
+          rpcRes = retryRpc.data;
+          rpcErr = null;
+        }
+      }
+
+      let finalRegId = registrationId;
+      let finalStudentId = null;
+
       if (!rpcErr && rpcRes && rpcRes.success) {
-        navigate(`/success/${registrationId}`);
-        return;
-      }
-
-      if (rpcRes && rpcRes.success === false && rpcRes.error) {
-        if (rpcRes.error.includes('23505') || rpcRes.error.includes('duplicate')) {
-          toast.error('A student with these details is already registered for this session.');
-        } else {
-          toast.error('Registration failed: ' + rpcRes.error);
+        finalRegId = rpcRes.registration_id || registrationId;
+        finalStudentId = rpcRes.student_id || null;
+      } else {
+        if (rpcRes && rpcRes.success === false && rpcRes.error) {
+          if (rpcRes.error.includes('23505') || rpcRes.error.includes('duplicate')) {
+            toast.error('A student with these details is already registered for this session.');
+          } else {
+            toast.error('Registration failed: ' + rpcRes.error);
+          }
+          setSubmitting(false);
+          return;
         }
-        setSubmitting(false);
-        return;
-      }
 
-      // 2. Fallback to direct insertion
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .insert({
-          name: safeName,
-          email: safeEmail,
-          phone: safePhone,
-          school_name: safeSchool,
-          city: safeCity,
-          photo_url: photoUrl,
-        })
-        .select()
-        .single();
+        // 2. Fallback to direct insertion
+        const { data: student, error: studentError } = await supabase
+          .from('students')
+          .insert({
+            name: safeName,
+            email: safeEmail,
+            phone: safePhone,
+            school_name: safeSchool,
+            city: safeCity,
+            photo_url: photoUrl,
+          })
+          .select()
+          .single();
 
-      if (studentError) {
-        if (studentError.code === '23505') {
-          toast.error('A student with these details may already be registered. Please check with the coordinator.', { duration: 6000 });
-        } else {
-          toast.error('Registration failed: ' + studentError.message);
+        if (studentError) {
+          if (studentError.code === '23505') {
+            toast.error('A student with these details may already be registered. Please check with the coordinator.', { duration: 6000 });
+          } else {
+            toast.error('Registration failed: ' + studentError.message);
+          }
+          setSubmitting(false);
+          return;
         }
-        setSubmitting(false);
-        return;
-      }
 
-      const { data: reg, error: regError } = await supabase
-        .from('registrations')
-        .insert({
+        finalStudentId = student.id;
+
+        const regPayload = {
           student_id: student.id,
           session_id: form.sessionId,
           class: safeEmail,
@@ -663,22 +683,68 @@ export default function KioskPage() {
           city: safeCity,
           registration_id: registrationId,
           registration_status: 'confirmed',
-          coordinator_id: activeDeskUser?.id || null,
-        })
-        .select()
-        .single();
-
-      if (regError) {
-        if (regError.code === '23505') {
-          toast.error('This student is already registered for this session.', { duration: 6000 });
-        } else {
-          toast.error('Registration failed: ' + regError.message);
+        };
+        if (activeDeskUser?.id) {
+          regPayload.coordinator_id = activeDeskUser.id;
         }
-        setSubmitting(false);
-        return;
+
+        let { data: reg, error: regError } = await supabase
+          .from('registrations')
+          .insert(regPayload)
+          .select()
+          .single();
+
+        // If insert failed because coordinator_id column doesn't exist, retry without it
+        if (regError && regError.message?.includes('coordinator_id')) {
+          delete regPayload.coordinator_id;
+          const retryInsert = await supabase
+            .from('registrations')
+            .insert(regPayload)
+            .select()
+            .single();
+          reg = retryInsert.data;
+          regError = retryInsert.error;
+        }
+
+        if (regError) {
+          if (regError.code === '23505') {
+            toast.error('This student is already registered for this session.', { duration: 6000 });
+          } else {
+            toast.error('Registration failed: ' + regError.message);
+          }
+          setSubmitting(false);
+          return;
+        }
+
+        if (reg?.registration_id) {
+          finalRegId = reg.registration_id;
+        }
       }
 
-      navigate(`/success/${reg.registration_id}`);
+      const selectedSess = sessions.find((s) => s.id === form.sessionId);
+      const registrationData = {
+        id: finalRegId,
+        registration_id: finalRegId,
+        class: safeEmail,
+        email: safeEmail,
+        city: safeCity,
+        registration_status: 'confirmed',
+        registered_at: new Date().toISOString(),
+        students: {
+          id: finalStudentId,
+          name: safeName,
+          email: safeEmail,
+          phone: safePhone,
+          school_name: safeSchool,
+          city: safeCity,
+          photo_url: photoUrl,
+        },
+        sessions: {
+          name: selectedSess?.name || 'Capacity Building Program',
+        },
+      };
+
+      navigate(`/success/${finalRegId}`, { state: { registrationData } });
     } catch (err) {
       toast.error('An unexpected error occurred. Please try again.');
       console.error(err);

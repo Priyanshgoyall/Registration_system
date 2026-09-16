@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { CheckCircle, Download, Printer, Home } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -10,6 +10,7 @@ import { downloadAsPDF } from '../utils/generatePDF';
 
 export default function SuccessPage() {
   const { registrationId } = useParams();
+  const location = useLocation();
   const cardRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
@@ -19,9 +20,24 @@ export default function SuccessPage() {
 
   useEffect(() => {
     async function fetchData() {
+      // Set initial data from location state if available (for instant UI render)
+      if (location.state?.registrationData) {
+        setData(location.state.registrationData);
+        const qr = await generateQRDataUrl('https://www.juet.ac.in/');
+        setQrDataUrl(qr);
+        setLoading(false);
+      }
+
+      if (!registrationId) {
+        setLoading(false);
+        return;
+      }
+
+      const cleanRegId = String(registrationId).trim();
+
       // 1. Try RPC function get_registration_public
-      const { data: rpcReg, error: rpcError } = await supabase.rpc('get_registration_public', { p_reg_id: registrationId });
-      if (!rpcError && rpcReg && rpcReg.id) {
+      const { data: rpcReg, error: rpcError } = await supabase.rpc('get_registration_public', { p_reg_id: cleanRegId });
+      if (!rpcError && rpcReg && (rpcReg.id || rpcReg.registration_id)) {
         setData(rpcReg);
         const qrUrl = 'https://www.juet.ac.in/';
         const qr = await generateQRDataUrl(qrUrl);
@@ -30,33 +46,44 @@ export default function SuccessPage() {
         return;
       }
 
-      // 2. Fallback direct table query
-      const { data: reg, error } = await supabase
+      // 2. Fallback direct table query by registration_id
+      let { data: reg } = await supabase
         .from('registrations')
         .select(`
           *,
           students (*),
           sessions (*)
         `)
-        .eq('registration_id', registrationId)
-        .single();
+        .ilike('registration_id', cleanRegId)
+        .maybeSingle();
 
-      if (error || !reg) {
-        toast.error('Registration not found');
-        setLoading(false);
-        return;
+      // 3. Fallback direct table query by UUID id
+      if (!reg && cleanRegId.length > 20) {
+        const { data: regById } = await supabase
+          .from('registrations')
+          .select(`
+            *,
+            students (*),
+            sessions (*)
+          `)
+          .eq('id', cleanRegId)
+          .maybeSingle();
+        reg = regById;
       }
 
-      setData(reg);
-
-      const qrUrl = 'https://www.juet.ac.in/';
-      const qr = await generateQRDataUrl(qrUrl);
-      setQrDataUrl(qr);
+      if (reg) {
+        setData(reg);
+        const qrUrl = 'https://www.juet.ac.in/';
+        const qr = await generateQRDataUrl(qrUrl);
+        setQrDataUrl(qr);
+      } else if (!location.state?.registrationData) {
+        toast.error('Registration not found');
+      }
 
       setLoading(false);
     }
     fetchData();
-  }, [registrationId]);
+  }, [registrationId, location.state]);
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
