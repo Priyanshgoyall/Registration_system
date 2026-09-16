@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   UserCog,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -20,9 +21,10 @@ const navItems = [
   { to: '/admin/sessions',      label: 'Sessions',        icon: CalendarDays },
   { to: '/admin/students',      label: 'Students',        icon: Users },
   { to: '/admin/registrations', label: 'Registrations',   icon: ClipboardList },
+  { to: '/admin/id-cards',      label: 'ID Cards',        icon: CreditCard, adminOnly: true },
   { to: '/admin/attendance',    label: 'Attendance',      icon: CheckSquare },
   { to: '/admin/certificates',  label: 'Certificates',    icon: Award },
-  { to: '/admin/coordinators',  label: 'Coordinators',    icon: UserCog },
+  { to: '/admin/coordinators',  label: 'Coordinators',    icon: UserCog, adminOnly: true },
 ];
 
 export default function AdminLayout({ children }) {
@@ -36,7 +38,7 @@ export default function AdminLayout({ children }) {
   };
 
   const filteredNavItems = navItems.filter((item) => {
-    if (item.to === '/admin/coordinators' && role !== 'admin') {
+    if (item.adminOnly && role !== 'admin') {
       return false;
     }
     return true;

@@ -815,8 +815,8 @@ export default function KioskPage() {
                 <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Capacity Building Program</h1>
-                <p className="text-xs text-slate-400">Registration Counter & Kiosk System</p>
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">CAPACITY BUILDING PROGRAM</h1>
+                <p className="text-xs text-slate-400">REGISTRATION COUNTER & KIOSK SYSTEM</p>
               </div>
             </div>
             <a
@@ -826,7 +826,7 @@ export default function KioskPage() {
               className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
               title="Open Admin Portal in new tab"
             >
-              <Shield size={14} className="text-blue-600" /> Admin Portal
+              <Shield size={14} className="text-blue-600" /> ADMIN PORTAL
             </a>
           </div>
         </header>

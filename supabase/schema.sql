@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS public.registrations (
 ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS city TEXT;
 ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS coordinator_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS id_card_url TEXT;
+ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS id_card_path TEXT;
 
 -- Attendance
 CREATE TABLE IF NOT EXISTS public.attendance (

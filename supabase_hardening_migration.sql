@@ -225,8 +225,10 @@ $$;
 GRANT EXECUTE ON FUNCTION public.check_existing_registration(text, text, uuid) TO anon, authenticated;
 
 
--- 1. Ensure user_profiles table exists and registrations has coordinator_id
+-- 1. Ensure user_profiles table exists and registrations has coordinator_id & id_card columns
 ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS coordinator_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS id_card_url TEXT;
+ALTER TABLE public.registrations ADD COLUMN IF NOT EXISTS id_card_path TEXT;
 
 -- Atomic Student Registration RPC
 CREATE OR REPLACE FUNCTION public.register_student(

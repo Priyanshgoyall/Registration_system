@@ -16,6 +16,7 @@ import Registrations from './pages/admin/Registrations';
 import Attendance from './pages/admin/Attendance';
 import Certificates from './pages/admin/Certificates';
 import Coordinators from './pages/admin/Coordinators';
+import IDCards from './pages/admin/IDCards';
 
 function AdminPages({ element }) {
   return (
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/admin/sessions" element={<AdminPages element={<Sessions />} />} />
         <Route path="/admin/students" element={<AdminPages element={<Students />} />} />
         <Route path="/admin/registrations" element={<AdminPages element={<Registrations />} />} />
+        <Route path="/admin/id-cards" element={<AdminPages element={<IDCards />} />} />
         <Route path="/admin/attendance" element={<AdminPages element={<Attendance />} />} />
         <Route path="/admin/certificates" element={<AdminPages element={<Certificates />} />} />
         <Route path="/admin/coordinators" element={<AdminPages element={<Coordinators />} />} />

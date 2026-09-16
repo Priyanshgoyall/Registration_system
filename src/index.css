@@ -115,11 +115,11 @@
   to   { transform: translateY(0);    opacity: 1; }
 }
 
-/* ── Print Media Styles: Clean Single A4 Page Printing ── */
+/* ── Print Media Styles: Clean Single A4 Sheet Printing ── */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 15mm 10mm;
+    margin: 4mm 4mm;
   }
 
   html, body {
@@ -136,16 +136,18 @@
     visibility: hidden !important;
   }
 
-  /* Make ONLY the printable ID card visible */
+  /* Make ONLY printable elements visible */
   .printable-card,
-  .printable-card * {
+  .printable-card *,
+  .a4-print-sheet,
+  .a4-print-sheet * {
     visibility: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
 
-  /* Position ID card neatly centered on single A4 sheet */
+  /* Single card print positioning */
   .printable-card {
     position: absolute !important;
     left: 50% !important;
@@ -160,8 +162,29 @@
     break-inside: avoid !important;
   }
 
+  /* Multi-card A4 sheet print positioning (2x5 grid) */
+  .a4-print-sheet {
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 4mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, 8.5cm) !important;
+    grid-gap: 2mm 10mm !important;
+    justify-content: center !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
   .printable-card img,
-  .printable-card svg {
+  .printable-card svg,
+  .a4-print-sheet img,
+  .a4-print-sheet svg {
     display: inline-block !important;
     visibility: visible !important;
   }
