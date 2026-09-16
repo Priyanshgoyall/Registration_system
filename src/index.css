@@ -64,7 +64,6 @@
   }
 
   /* ── Admin panel — light overrides ── */
-  /* stat-card uses the light card as base */
   .stat-card {
     @apply bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-1;
   }
@@ -74,7 +73,6 @@
   .table-cell {
     @apply px-4 py-3 text-sm text-slate-700;
   }
-  /* Admin sidebar links */
   .sidebar-link {
     @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all duration-150 font-medium text-sm;
   }
@@ -117,16 +115,28 @@
   to   { transform: translateY(0);    opacity: 1; }
 }
 
-/* ── Print Media Styles: Print ONLY the registration card with FULL colors & logos ── */
+/* ── Print Media Styles: Clean Single A4 Page Printing ── */
 @media print {
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    color-adjust: exact !important;
+  @page {
+    size: A4 portrait;
+    margin: 15mm 10mm;
   }
+
+  html, body {
+    height: auto !important;
+    min-height: auto !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Hide UI elements and backgrounds */
   body * {
     visibility: hidden !important;
   }
+
+  /* Make ONLY the printable ID card visible */
   .printable-card,
   .printable-card * {
     visibility: visible !important;
@@ -134,22 +144,25 @@
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
+
+  /* Position ID card neatly centered on single A4 sheet */
   .printable-card {
     position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    left: 50% !important;
+    top: 20mm !important;
+    transform: translateX(-50%) !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
     background: transparent !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
+
+  .printable-card img,
   .printable-card svg {
     display: inline-block !important;
     visibility: visible !important;
-  }
-  @page {
-    size: 8.5cm 5.5cm;
-    margin: 0;
   }
 }

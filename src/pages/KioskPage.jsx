@@ -346,21 +346,51 @@ export default function KioskPage() {
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-IN';
     recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 3;
     recognition.continuous = false;
+
+    // Optional JSGF phonetic grammar hints for browser speech engine
+    const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+    if (SpeechGrammarList) {
+      try {
+        const speechGrammarList = new SpeechGrammarList();
+        const grammar = '#JSGF V1.0; grammar keywords; public <keyword> = Priyansh | Goyal | Jaypee | Raghogarh | Guna | JUET | Bhopal | Indore | Gwalior | Delhi | DPS | KV ;';
+        speechGrammarList.addFromString(grammar, 1);
+        recognition.grammars = speechGrammarList;
+      } catch {
+        // Fallback gracefully if browser grammar list is restricted
+      }
+    }
 
     setMicState(MIC_STATE.LISTENING);
 
     recognition.onresult = (event) => {
-      let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript + ' ';
+      // Evaluate up to 3 speech recognition alternatives for best normalized match
+      let selectedTranscript = '';
+      let bestCleaned = '';
+
+      if (event.results[0]) {
+        for (let a = 0; a < event.results[0].length; a++) {
+          const altText = event.results[0][a]?.transcript?.trim();
+          if (altText) {
+            const candidateCleaned = normalizeForField(field.key, altText);
+            if (candidateCleaned && candidateCleaned.length >= 2) {
+              bestCleaned = candidateCleaned;
+              selectedTranscript = altText;
+              break; // Pick the top valid alternative
+            }
+          }
+        }
       }
-      transcript = transcript.trim();
+
+      if (!bestCleaned && event.results[0]?.[0]?.transcript) {
+        selectedTranscript = event.results[0][0].transcript.trim();
+        bestCleaned = normalizeForField(field.key, selectedTranscript);
+      }
 
       setMicState(MIC_STATE.PROCESSING);
 
-      const cleaned = normalizeForField(field.key, transcript);
+      const cleaned = bestCleaned;
 
       // Strict validation for captured voice field
       let isValid = true;
