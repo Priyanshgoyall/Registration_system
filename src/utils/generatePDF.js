@@ -92,17 +92,17 @@ export async function downloadAsPDF(element, filename = 'registration-card') {
 }
 
 /**
- * Generates an A4 print sheet containing 1 to 10 ID cards in a 2x5 grid.
+ * Generates an A4 print sheet containing 1 to 8 ID cards in a 2x4 grid.
  * Target A4: 210 mm x 297 mm. Each Card: 85 mm x 55 mm (Landscape).
- * @param {Array<HTMLElement>} cardElements - Array of 1 to 10 DOM elements to render
+ * @param {Array<HTMLElement>} cardElements - Array of 1 to 8 DOM elements to render
  * @param {string} filename - Output filename
  */
 export async function generateA4PrintPDF(cardElements, filename = 'id-cards-a4-sheet') {
   if (!cardElements || cardElements.length === 0) {
     throw new Error('Please select at least 1 ID card to print.');
   }
-  if (cardElements.length > 10) {
-    throw new Error('You can print a maximum of 10 ID cards at a time.');
+  if (cardElements.length > 8) {
+    throw new Error('You can print a maximum of 8 ID cards at a time.');
   }
 
   // Create A4 PDF (210 mm x 297 mm, portrait)
@@ -112,11 +112,11 @@ export async function generateA4PrintPDF(cardElements, filename = 'id-cards-a4-s
     format: 'a4',
   });
 
-  // Grid coordinates for 2x5 layout (2 columns x 5 rows)
+  // Grid coordinates for 2x4 layout (2 columns x 4 rows)
   // Col 1: 15mm, Col 2: 110mm (85mm card + 10mm gutter = 95mm spacing)
-  // Rows: 12mm, 69mm, 126mm, 183mm, 240mm (55mm card + 2mm gutter)
+  // Rows: 15mm, 84mm, 153mm, 222mm (55mm card + 14mm gutter for easy cutting)
   const colX = [15, 110];
-  const rowY = [12, 69, 126, 183, 240];
+  const rowY = [15, 84, 153, 222];
 
   for (let i = 0; i < cardElements.length; i++) {
     const el = cardElements[i];
@@ -124,12 +124,15 @@ export async function generateA4PrintPDF(cardElements, filename = 'id-cards-a4-s
     const imgData = canvas.toDataURL('image/png', 1.0);
 
     const col = i % 2; // 0 or 1
-    const row = Math.floor(i / 2); // 0 to 4
+    const row = Math.floor(i / 2); // 0 to 3
 
     const x = colX[col];
     const y = rowY[row];
 
     pdf.addImage(imgData, 'PNG', x, y, 85, 55, undefined, 'FAST');
+    pdf.setDrawColor(148, 163, 184); // slate-400 crisp cut border
+    pdf.setLineWidth(0.3);
+    pdf.roundedRect(x, y, 85, 55, 3, 3, 'S');
   }
 
   pdf.save(`${filename}.pdf`);

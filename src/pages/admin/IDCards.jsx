@@ -15,7 +15,7 @@ import { downloadAsPDF, generateA4PrintPDF } from '../../utils/generatePDF';
 
 // ── Admin ID-Card Management & A4 Printing System ────────────────────────────
 // Accessible exclusively by Main Admin users.
-// Supports custom selection of 1 to 10 ID cards per A4 print sheet.
+// Supports custom selection of 1 to 8 ID cards per A4 print sheet.
 
 export default function IDCards() {
   const { isAdmin, loading: authLoading } = useAuth();
@@ -28,7 +28,7 @@ export default function IDCards() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSession, setFilterSession] = useState('');
 
-  // 1-10 Card Selection State
+  // 1-8 Card Selection State
   const [selectedIds, setSelectedIds] = useState([]);
 
   // Printing & Generation state
@@ -93,25 +93,25 @@ export default function IDCards() {
     return matchesSearch && matchesSession;
   });
 
-  // Checkbox toggle logic with strict 1-10 limit enforcement
+  // Checkbox toggle logic with strict 1-8 limit enforcement
   const toggleSelect = (id) => {
     if (selectedIds.includes(id)) {
       setSelectedIds((prev) => prev.filter((item) => item !== id));
     } else {
-      if (selectedIds.length >= 10) {
-        toast.error('You can print a maximum of 10 ID cards at a time.');
+      if (selectedIds.length >= 8) {
+        toast.error('You can print a maximum of 8 ID cards at a time.');
         return;
       }
       setSelectedIds((prev) => [...prev, id]);
     }
   };
 
-  // Select All: Selects at most 10 eligible cards from current filtered view
+  // Select All: Selects at most 8 eligible cards from current filtered view
   const handleSelectAll = () => {
-    const eligible = filtered.slice(0, 10).map((r) => r.id);
+    const eligible = filtered.slice(0, 8).map((r) => r.id);
     setSelectedIds(eligible);
-    if (filtered.length > 10) {
-      toast.success('Selected top 10 cards (maximum allowed limit).');
+    if (filtered.length > 8) {
+      toast.success('Selected top 8 cards (maximum allowed limit).');
     }
   };
 
@@ -138,14 +138,14 @@ export default function IDCards() {
     }
   };
 
-  // Direct Print Panel Handler for selected 1 to 10 cards
+  // Direct Print Panel Handler for selected 1 to 8 cards
   const handlePrintSelectedA4 = () => {
     if (selectedIds.length === 0) {
       toast.error('Please select at least 1 ID card.');
       return;
     }
-    if (selectedIds.length > 10) {
-      toast.error('You can print a maximum of 10 ID cards at a time.');
+    if (selectedIds.length > 8) {
+      toast.error('You can print a maximum of 8 ID cards at a time.');
       return;
     }
 
@@ -154,7 +154,7 @@ export default function IDCards() {
   };
 
   const selectedCount = selectedIds.length;
-  const isPrintDisabled = selectedCount === 0 || selectedCount > 10 || printing;
+  const isPrintDisabled = selectedCount === 0 || selectedCount > 8 || printing;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -163,7 +163,7 @@ export default function IDCards() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">ID Card Management & A4 Printing</h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            Retrieve, store, and print student ID cards on standard A4 gloss paper (up to 10 cards per sheet).
+            Retrieve, store, and print student ID cards on standard A4 gloss paper (up to 8 cards per sheet).
           </p>
         </div>
         <button className="btn-secondary" onClick={fetchData} title="Refresh data">
@@ -177,16 +177,16 @@ export default function IDCards() {
           <div className="flex items-center gap-3">
             <div className="px-3.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl font-bold text-sm flex items-center gap-2">
               <CreditCard size={16} className="text-blue-600" />
-              <span>Selected: {selectedCount} / 10</span>
+              <span>Selected: {selectedCount} / 8</span>
             </div>
-            {selectedCount > 0 && selectedCount <= 10 && (
+            {selectedCount > 0 && selectedCount <= 8 && (
               <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
                 <CheckCircle2 size={14} /> Ready for A4 Print Sheet
               </span>
             )}
-            {selectedCount > 10 && (
+            {selectedCount > 8 && (
               <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
-                <AlertCircle size={14} /> Exceeds 10 card maximum
+                <AlertCircle size={14} /> Exceeds 8 card maximum
               </span>
             )}
           </div>
@@ -197,7 +197,7 @@ export default function IDCards() {
               onClick={handleSelectAll}
               disabled={filtered.length === 0}
             >
-              <CheckSquare size={14} /> Select Top 10
+              <CheckSquare size={14} /> Select Top 8
             </button>
             <button
               className="btn-secondary text-xs py-2 px-3"
@@ -262,7 +262,7 @@ export default function IDCards() {
                     <input
                       type="checkbox"
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                      checked={selectedCount > 0 && selectedCount <= 10 && filtered.slice(0, 10).every((r) => selectedIds.includes(r.id))}
+                      checked={selectedCount > 0 && selectedCount <= 8 && filtered.slice(0, 8).every((r) => selectedIds.includes(r.id))}
                       onChange={(e) => (e.target.checked ? handleSelectAll() : handleClearSelection())}
                     />
                   </th>
@@ -354,7 +354,7 @@ export default function IDCards() {
         ))}
       </div>
 
-      {/* A4 Print Sheet Container for Direct Browser Print Panel (Selected 1-10 Cards in 2x5 Grid) */}
+      {/* A4 Print Sheet Container for Direct Browser Print Panel (Selected 1-8 Cards in 2x4 Grid) */}
       <div className="a4-print-sheet hidden print:grid">
         {selectedIds.map((id) => {
           const reg = registrations.find((r) => r.id === id);

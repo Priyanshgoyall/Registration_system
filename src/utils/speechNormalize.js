@@ -33,6 +33,7 @@ const PHONETIC_CORRECTIONS = [
   [/\bchoudary\b/gi, 'Choudhary'],
   [/\bchoudhari\b/gi, 'Choudhary'],
   [/\bchowdhury\b/gi, 'Choudhary'],
+  [/\puniya\b/gi, 'poonia'],
   [/\bsing\b/gi, 'Singh'],
   [/\bverma\b/gi, 'Verma'],
   [/\bbarma\b/gi, 'Verma'],

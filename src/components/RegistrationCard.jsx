@@ -22,7 +22,7 @@ const RegistrationCard = forwardRef(function RegistrationCard(
   return (
     <div
       ref={ref}
-      className="bg-white text-slate-900 rounded-xl overflow-hidden shadow-2xl flex flex-col justify-between border border-slate-300 print:shadow-none print:border-none"
+      className="bg-white text-slate-900 rounded-xl overflow-hidden shadow-2xl flex flex-col justify-between border border-slate-300 print:shadow-none print:border print:border-slate-400"
       style={{
         width: '8.5cm',
         height: '5.5cm',

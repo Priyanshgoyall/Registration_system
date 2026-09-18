@@ -162,17 +162,17 @@
     break-inside: avoid !important;
   }
 
-  /* Multi-card A4 sheet print positioning (2x5 grid) */
+  /* Multi-card A4 sheet print positioning (2x4 grid, 8 cards max with spacious cutting gaps) */
   .a4-print-sheet {
     position: absolute !important;
     left: 0 !important;
     right: 0 !important;
-    top: 4mm !important;
+    top: 10mm !important;
     margin: 0 auto !important;
     padding: 0 !important;
     display: grid !important;
     grid-template-columns: repeat(2, 8.5cm) !important;
-    grid-gap: 2mm 10mm !important;
+    grid-gap: 12mm 10mm !important;
     justify-content: center !important;
     box-shadow: none !important;
     border: none !important;
@@ -187,5 +187,12 @@
   .a4-print-sheet svg {
     display: inline-block !important;
     visibility: visible !important;
+  }
+
+  .print-card-wrapper > div,
+  .printable-card {
+    border: 1px solid #94a3b8 !important;
+    border-radius: 12px !important;
+    box-sizing: border-box !important;
   }
 }

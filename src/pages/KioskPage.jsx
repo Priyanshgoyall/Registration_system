@@ -314,7 +314,20 @@ export default function KioskPage() {
   // ── Camera ──
   const capture = useCallback(() => {
     const screenshot = webcamRef.current?.getScreenshot();
-    if (screenshot) setPhotoDataUrl(screenshot);
+    if (!screenshot) return;
+
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0);
+      setPhotoDataUrl(canvas.toDataURL('image/jpeg', 0.92));
+    };
+    img.src = screenshot;
   }, []);
   const retake = () => setPhotoDataUrl(null);
 
@@ -1064,7 +1077,13 @@ export default function KioskPage() {
                       </div>
                     ) : cameraEnabled ? (
                       <div className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-slate-300 bg-black">
-                        <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-auto" />
+                        <Webcam
+                          audio={false}
+                          ref={webcamRef}
+                          screenshotFormat="image/jpeg"
+                          className="w-full h-auto -scale-x-1"
+                          style={{ transform: 'scaleX(-1)' }}
+                        />
                       </div>
                     ) : (
                       <div className="w-44 h-52 bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
