@@ -14,6 +14,7 @@ export async function renderUserCertificateCanvas(studentName, templateImageSrc 
         try {
           await document.fonts.load('60px "Great Vibes"');
           await document.fonts.load('60px "Dancing Script"');
+          await document.fonts.ready;
         } catch {
           // fallback gracefully
         }
@@ -74,7 +75,25 @@ export async function generateCertificatePDF({
 
     if (canvas) {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      pdf.addImage(dataUrl, 'JPEG', 0, 0, W, H);
+      // Preserve aspect ratio to prevent image squashing/stretching
+      const canvasRatio = canvas.width / canvas.height;
+      const pageRatio = W / H;
+      let renderW = W;
+      let renderH = H;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (Math.abs(canvasRatio - pageRatio) > 0.01) {
+        if (canvasRatio > pageRatio) {
+          renderH = W / canvasRatio;
+          offsetY = (H - renderH) / 2;
+        } else {
+          renderW = H * canvasRatio;
+          offsetX = (W - renderW) / 2;
+        }
+      }
+
+      pdf.addImage(dataUrl, 'JPEG', offsetX, offsetY, renderW, renderH);
     } else {
       // Fallback
       pdf.setFont('helvetica', 'bold');

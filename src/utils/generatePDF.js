@@ -51,8 +51,15 @@ export async function renderHighResCardCanvas(element) {
   document.body.appendChild(clone);
 
   await preFetchImages(clone);
-  // Allow fonts & images to settle
-  await new Promise((r) => setTimeout(r, 100));
+  // Ensure fonts are completely loaded and settled before capture
+  if (typeof document !== 'undefined' && document.fonts) {
+    try {
+      await document.fonts.ready;
+    } catch {
+      // fallback
+    }
+  }
+  await new Promise((r) => setTimeout(r, 150));
 
   const canvas = await html2canvas(clone, {
     scale: 4, // 300+ DPI ultra-high resolution

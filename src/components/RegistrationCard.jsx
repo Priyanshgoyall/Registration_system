@@ -139,6 +139,8 @@
 // New code by Atharva
 
 
+
+
 import { forwardRef } from 'react';
 import { GraduationCap, QrCode } from 'lucide-react';
 
@@ -234,7 +236,7 @@ const RegistrationCard = forwardRef(function RegistrationCard(
                 <span className="text-slate-400 font-medium">City:</span> {cityVal || '—'}
               </span>
               <span
-                className={`text-[7px] font-bold px-1.5 py-0.2 rounded uppercase leading-normal ${
+                className={`inline-flex items-center justify-center text-[7px] font-bold px-2 py-0.5 rounded-full uppercase leading-none tracking-wide ${
                   registration?.registration_status === 'confirmed'
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-yellow-100 text-yellow-800'
