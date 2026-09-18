@@ -140,7 +140,6 @@
 
 
 
-
 import { forwardRef } from 'react';
 import { GraduationCap, QrCode } from 'lucide-react';
 
@@ -162,10 +161,20 @@ const RegistrationCard = forwardRef(function RegistrationCard(
   const nameFontSize = nameVal.length > 22 ? 'text-[10px]' : nameVal.length > 17 ? 'text-[11px]' : 'text-[12px]';
   const emailFontSize = (emailVal || '').length > 25 ? 'text-[7.5px]' : 'text-[8.5px]';
 
+  // SVG badge data URL ensures 100% pixel-perfect vector alignment in both screen and html2canvas PDF rendering
+  const statusText = (registration?.registration_status ?? 'confirmed').toUpperCase();
+  const isConfirmed = statusText === 'CONFIRMED';
+  const badgeBg = isConfirmed ? '#d1fae5' : '#fef9c3';
+  const badgeTextColor = isConfirmed ? '#065f46' : '#854d0e';
+  const badgeWidth = Math.max(68, statusText.length * 7 + 16);
+  const centerX = badgeWidth / 2;
+  const badgeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${badgeWidth}" height="16" viewBox="0 0 ${badgeWidth} 16"><rect width="${badgeWidth}" height="16" rx="8" fill="${badgeBg}"/><text x="${centerX}" y="11" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="8" font-weight="700" fill="${badgeTextColor}" text-anchor="middle" letter-spacing="0.5">${statusText}</text></svg>`;
+  const badgeDataUrl = `data:image/svg+xml;base64,${typeof btoa !== 'undefined' ? btoa(badgeSvg) : ''}`;
+
   return (
     <div
       ref={ref}
-      className="bg-white text-slate-900 rounded-xl overflow-hidden shadow-2xl flex flex-col justify-between border border-slate-300 print:shadow-none print:border print:border-slate-400"
+      className="registration-card-root bg-white text-slate-900 rounded-xl overflow-hidden shadow-2xl flex flex-col justify-between border border-slate-300 print:shadow-none print:border print:border-slate-400"
       style={{
         width: '8.5cm',
         height: '5.5cm',
@@ -235,15 +244,11 @@ const RegistrationCard = forwardRef(function RegistrationCard(
               <span className="whitespace-nowrap overflow-visible">
                 <span className="text-slate-400 font-medium">City:</span> {cityVal || '—'}
               </span>
-              <span
-                className={`inline-flex items-center justify-center text-[7px] font-bold px-2 py-0.5 rounded-full uppercase leading-none tracking-wide ${
-                  registration?.registration_status === 'confirmed'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-yellow-100 text-yellow-800'
-                }`}
-              >
-                {registration?.registration_status ?? 'confirmed'}
-              </span>
+              <img
+                src={badgeDataUrl}
+                alt={statusText}
+                className="h-4 w-auto object-contain flex-shrink-0"
+              />
             </div>
           </div>
         </div>
