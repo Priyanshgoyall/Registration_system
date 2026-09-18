@@ -33,7 +33,7 @@ const PHONETIC_CORRECTIONS = [
   [/\bchoudary\b/gi, 'Choudhary'],
   [/\bchoudhari\b/gi, 'Choudhary'],
   [/\bchowdhury\b/gi, 'Choudhary'],
-  [/\puniya\b/gi, 'poonia'],
+  [/\bpuniya\b/gi, 'Poonia'],
   [/\bsing\b/gi, 'Singh'],
   [/\bverma\b/gi, 'Verma'],
   [/\bbarma\b/gi, 'Verma'],
@@ -45,6 +45,8 @@ const PHONETIC_CORRECTIONS = [
   [/\bjapee\b/gi, 'Jaypee'],
   [/\bragogarh\b/gi, 'Raghogarh'],
   [/\bgoona\b/gi, 'Guna'],
+  [/'Neel'/gi, 'Neiil'],
+
 ];
 
 function applyPhoneticCorrections(text) {
