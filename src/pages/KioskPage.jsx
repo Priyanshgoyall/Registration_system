@@ -924,7 +924,7 @@ export default function KioskPage() {
               <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">CAPACITY BUILDING PROGRAMM</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">CAPACITY BUILDING PROGRAM</h1>
               <p className="text-xs text-slate-400 font-medium">Registration Counter & Kiosk System</p>
             </div>
           </div>
