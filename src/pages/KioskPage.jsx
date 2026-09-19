@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { generateRegistrationId } from '../utils/generateId';
+import { generateRegistrationId, getNextRegistrationId } from '../utils/generateId';
 import { normalizePhone, normalizeEmail, normalizeName, normalizeSchool, normalizeCity } from '../utils/speechNormalize';
 import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
@@ -642,127 +642,81 @@ export default function KioskPage() {
       const safePhone = phoneDigits;
       const safeSchool = sanitizeText(form.school_name);
       const safeCity = sanitizeText(form.city);
-      const registrationId = generateRegistrationId();
-
-      // 1. Try atomic register_student RPC function (with p_coordinator_id)
-      let { data: rpcRes, error: rpcErr } = await supabase.rpc('register_student', {
-        p_name: safeName,
-        p_email: safeEmail,
-        p_phone: safePhone,
-        p_school_name: safeSchool,
-        p_city: safeCity,
-        p_photo_url: photoUrl,
-        p_session_id: form.sessionId,
-        p_registration_id: registrationId,
-        p_coordinator_id: activeDeskUser?.id || null,
+      const registrationId = await getNextRegistrationId(supabase, {
+        coordinatorUser: activeDeskUser,
+        sessionId: form.sessionId,
       });
 
-      // If RPC failed due to signature mismatch, retry without p_coordinator_id
-      if (rpcErr) {
-        const retryRpc = await supabase.rpc('register_student', {
-          p_name: safeName,
-          p_email: safeEmail,
-          p_phone: safePhone,
-          p_school_name: safeSchool,
-          p_city: safeCity,
-          p_photo_url: photoUrl,
-          p_session_id: form.sessionId,
-          p_registration_id: registrationId,
-        });
-        if (!retryRpc.error && retryRpc.data) {
-          rpcRes = retryRpc.data;
-          rpcErr = null;
+      // Direct insertion: saves exact coordinator-unique sequential ID
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .insert({
+          name: safeName,
+          email: safeEmail,
+          phone: safePhone,
+          school_name: safeSchool,
+          city: safeCity,
+          photo_url: photoUrl,
+        })
+        .select()
+        .single();
+
+      if (studentError) {
+        if (studentError.code === '23505') {
+          toast.error('A student with these details may already be registered. Please check with the coordinator.', { duration: 6000 });
+        } else {
+          toast.error('Registration failed: ' + studentError.message);
         }
+        setSubmitting(false);
+        return;
       }
 
-      let finalRegId = registrationId;
-      let finalStudentId = null;
+      const finalStudentId = student.id;
 
-      if (!rpcErr && rpcRes && rpcRes.success) {
-        finalRegId = rpcRes.registration_id || registrationId;
-        finalStudentId = rpcRes.student_id || null;
-      } else {
-        if (rpcRes && rpcRes.success === false && rpcRes.error) {
-          if (rpcRes.error.includes('23505') || rpcRes.error.includes('duplicate')) {
-            toast.error('A student with these details is already registered for this session.');
-          } else {
-            toast.error('Registration failed: ' + rpcRes.error);
-          }
-          setSubmitting(false);
-          return;
-        }
+      const regPayload = {
+        student_id: student.id,
+        session_id: form.sessionId,
+        class: safeEmail,
+        email: safeEmail,
+        city: safeCity,
+        registration_id: registrationId,
+        registration_status: 'confirmed',
+      };
+      if (activeDeskUser?.id) {
+        regPayload.coordinator_id = activeDeskUser.id;
+      }
 
-        // 2. Fallback to direct insertion
-        const { data: student, error: studentError } = await supabase
-          .from('students')
-          .insert({
-            name: safeName,
-            email: safeEmail,
-            phone: safePhone,
-            school_name: safeSchool,
-            city: safeCity,
-            photo_url: photoUrl,
-          })
-          .select()
-          .single();
+      let { data: reg, error: regError } = await supabase
+        .from('registrations')
+        .insert(regPayload)
+        .select()
+        .single();
 
-        if (studentError) {
-          if (studentError.code === '23505') {
-            toast.error('A student with these details may already be registered. Please check with the coordinator.', { duration: 6000 });
-          } else {
-            toast.error('Registration failed: ' + studentError.message);
-          }
-          setSubmitting(false);
-          return;
-        }
-
-        finalStudentId = student.id;
-
-        const regPayload = {
-          student_id: student.id,
-          session_id: form.sessionId,
-          class: safeEmail,
-          email: safeEmail,
-          city: safeCity,
-          registration_id: registrationId,
-          registration_status: 'confirmed',
-        };
-        if (activeDeskUser?.id) {
-          regPayload.coordinator_id = activeDeskUser.id;
-        }
-
-        let { data: reg, error: regError } = await supabase
+      // If insert failed because coordinator_id column doesn't exist, retry without it
+      if (regError && regError.message?.includes('coordinator_id')) {
+        delete regPayload.coordinator_id;
+        const retryInsert = await supabase
           .from('registrations')
           .insert(regPayload)
           .select()
           .single();
-
-        // If insert failed because coordinator_id column doesn't exist, retry without it
-        if (regError && regError.message?.includes('coordinator_id')) {
-          delete regPayload.coordinator_id;
-          const retryInsert = await supabase
-            .from('registrations')
-            .insert(regPayload)
-            .select()
-            .single();
-          reg = retryInsert.data;
-          regError = retryInsert.error;
-        }
-
-        if (regError) {
-          if (regError.code === '23505') {
-            toast.error('This student is already registered for this session.', { duration: 6000 });
-          } else {
-            toast.error('Registration failed: ' + regError.message);
-          }
-          setSubmitting(false);
-          return;
-        }
-
-        if (reg?.registration_id) {
-          finalRegId = reg.registration_id;
-        }
+        reg = retryInsert.data;
+        regError = retryInsert.error;
       }
+
+      if (regError) {
+        // Rollback created student to avoid orphaned record
+        await supabase.from('students').delete().eq('id', student.id);
+        if (regError.code === '23505') {
+          toast.error('This student is already registered for this session.', { duration: 6000 });
+        } else {
+          toast.error('Registration failed: ' + regError.message);
+        }
+        setSubmitting(false);
+        return;
+      }
+
+      const finalRegId = reg?.registration_id || registrationId;
 
       const selectedSess = sessions.find((s) => s.id === form.sessionId);
       const registrationData = {
@@ -956,6 +910,14 @@ export default function KioskPage() {
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               Desk Active: {activeDeskUser?.full_name || activeDeskUser?.email}
+              <span className="px-1.5 py-0.5 rounded bg-emerald-200/80 text-emerald-900 font-mono text-[11px] font-bold">
+                Desk #{(() => {
+                  if (!activeDeskUser) return '01';
+                  const str = `${activeDeskUser.email || ''} ${activeDeskUser.full_name || ''}`;
+                  const match = str.match(/(?:coord(?:inator)?|desk|counter|operator|user)\s*[-_#]?\s*(\d+)/i) || str.match(/\b(\d{1,2})\b/);
+                  return match ? String(parseInt(match[1], 10)).padStart(2, '0') : '01';
+                })()}
+              </span>
             </span>
             <button
               onClick={handleDeskLogout}

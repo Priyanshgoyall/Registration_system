@@ -393,7 +393,18 @@ CREATE POLICY "auth_all_user_profiles" ON public.user_profiles
                             {(p.full_name || p.email || 'C')[0].toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-semibold text-slate-900">{p.full_name || '—'}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-slate-900">{p.full_name || '—'}</p>
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold font-mono bg-blue-100 text-blue-800 border border-blue-200">
+                                Desk #{(() => {
+                                  const str = `${p.email || ''} ${p.full_name || ''}`;
+                                  const match = str.match(/(?:coord(?:inator)?|desk|counter|operator|user)\s*[-_#]?\s*(\d+)/i) || str.match(/\b(\d{1,2})\b/);
+                                  if (match) return String(parseInt(match[1], 10)).padStart(2, '0');
+                                  const idx = [...profiles].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).findIndex((x) => x.id === p.id);
+                                  return idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
+                                })()}
+                              </span>
+                            </div>
                             <p className="text-xs text-slate-400 font-mono">{p.email}</p>
                           </div>
                         </div>
