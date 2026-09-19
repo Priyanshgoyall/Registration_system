@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { generateRegistrationId } from '../utils/generateId';
+import { generateRegistrationId, getNextRegistrationId } from '../utils/generateId';
 import { normalizePhone, normalizeEmail, normalizeName, normalizeSchool, normalizeCity } from '../utils/speechNormalize';
 import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
@@ -642,7 +642,10 @@ export default function KioskPage() {
       const safePhone = phoneDigits;
       const safeSchool = sanitizeText(form.school_name);
       const safeCity = sanitizeText(form.city);
-      const registrationId = generateRegistrationId();
+      const registrationId = await getNextRegistrationId(supabase, {
+        coordinatorUser: activeDeskUser,
+        sessionId: form.sessionId,
+      });
 
       // 1. Try atomic register_student RPC function (with p_coordinator_id)
       let { data: rpcRes, error: rpcErr } = await supabase.rpc('register_student', {
@@ -1430,3 +1433,6 @@ function EditableConfirmRow({ label, fieldKey, value, icon: Icon, editing, error
     </button>
   );
 }
+
+
+// temporary edit

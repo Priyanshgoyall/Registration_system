@@ -41,19 +41,30 @@ export default function Registrations() {
   const handleDeleteAll = async () => {
     setDeletingAll(true);
     try {
-      // Deletes ONLY registration records, preserving students, sessions, attendance, & certificates
-      const { error } = await supabase
+      // 1. Delete all registrations (associated attendance & certificates cascade automatically)
+      const { error: regError } = await supabase
         .from('registrations')
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000');
 
-      if (error) {
-        toast.error('Failed to delete registrations: ' + error.message);
-      } else {
-        toast.success('All registration records deleted successfully.');
-        setRegistrations([]);
-        setPage(1);
+      if (regError) {
+        toast.error('Failed to delete registrations: ' + regError.message);
+        return;
       }
+
+      // 2. Delete all students
+      const { error: stuError } = await supabase
+        .from('students')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (stuError) {
+        console.warn('Student profile deletion warning:', stuError);
+      }
+
+      toast.success('All registrations and students deleted. Registration numbering reset to 001.');
+      setRegistrations([]);
+      setPage(1);
     } catch (err) {
       toast.error('An error occurred while deleting registrations.');
       console.error(err);
@@ -80,6 +91,35 @@ export default function Registrations() {
   const handleStatusChange = async () => {
     if (!actionTarget) return;
     setSaving(true);
+
+    if (actionTarget.action === 'delete') {
+      const regId = actionTarget.reg.id;
+      const studentId = actionTarget.reg.student_id;
+
+      // Delete registration
+      const { error: regErr } = await supabase.from('registrations').delete().eq('id', regId);
+      if (regErr) {
+        toast.error('Failed to delete registration: ' + regErr.message);
+        setSaving(false);
+        setActionTarget(null);
+        return;
+      }
+
+      // Delete student if exists
+      if (studentId) {
+        const { error: stuErr } = await supabase.from('students').delete().eq('id', studentId);
+        if (stuErr) {
+          console.warn('Student profile deletion warning:', stuErr);
+        }
+      }
+
+      toast.success('Registration and student profile deleted successfully');
+      setSaving(false);
+      setActionTarget(null);
+      fetchAll();
+      return;
+    }
+
     const { error } = await supabase.from('registrations').update({
       registration_status: actionTarget.action === 'confirm' ? 'confirmed' : 'cancelled',
     }).eq('id', actionTarget.reg.id);
@@ -210,6 +250,9 @@ export default function Registrations() {
                             <XCircle size={14} />
                           </button>
                         )}
+                        <button className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all" title="Delete Registration & Student" onClick={() => setActionTarget({ reg: r, action: 'delete' })}>
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -247,10 +290,12 @@ export default function Registrations() {
       </div>
 
       {/* Confirm action modal */}
-      <Modal isOpen={!!actionTarget} onClose={() => setActionTarget(null)} title={actionTarget?.action === 'confirm' ? 'Confirm Registration' : 'Cancel Registration'} size="sm">
+      <Modal isOpen={!!actionTarget} onClose={() => setActionTarget(null)} title={actionTarget?.action === 'confirm' ? 'Confirm Registration' : actionTarget?.action === 'delete' ? 'Delete Registration & Student' : 'Cancel Registration'} size="sm">
         <p className="text-slate-600 mb-6">
           {actionTarget?.action === 'confirm'
             ? `Confirm the registration of ${actionTarget?.reg?.students?.name}?`
+            : actionTarget?.action === 'delete'
+            ? `Permanently delete the registration and student profile for "${actionTarget?.reg?.students?.name}"? This action cannot be undone.`
             : `Cancel the registration of ${actionTarget?.reg?.students?.name}? This cannot be easily undone.`}
         </p>
         <div className="flex gap-3">
@@ -261,7 +306,7 @@ export default function Registrations() {
             disabled={saving}
           >
             {saving ? <Spinner size="sm" /> : null}
-            {saving ? 'Saving…' : actionTarget?.action === 'confirm' ? 'Confirm' : 'Cancel Registration'}
+            {saving ? 'Saving…' : actionTarget?.action === 'confirm' ? 'Confirm' : actionTarget?.action === 'delete' ? 'Delete' : 'Cancel Registration'}
           </button>
         </div>
       </Modal>
@@ -272,8 +317,8 @@ export default function Registrations() {
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
             <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
             <div>
-              <p className="text-sm font-semibold text-red-900">Delete all registrations?</p>
-              <p className="text-xs text-red-700 mt-0.5">This action cannot be undone. This will delete ONLY registration records ({registrations.length} items). Student profiles and sessions will remain untouched.</p>
+              <p className="text-sm font-semibold text-red-900">Delete all registrations and students?</p>
+              <p className="text-xs text-red-700 mt-0.5">This action cannot be undone. This will permanently delete all {registrations.length} registration records AND all student profiles. Registration numbering will reset to 001.</p>
             </div>
           </div>
           <div className="flex gap-3 pt-2">

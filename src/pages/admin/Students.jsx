@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Search, Users, GraduationCap, Phone, School, Download, Save, X, User, Mail, MapPin } from 'lucide-react';
+import { Search, Users, GraduationCap, Phone, School, Download, Save, X, User, Mail, MapPin, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import Modal from '../../components/Modal';
 import Spinner from '../../components/Spinner';
@@ -18,6 +18,7 @@ export default function Students() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', school_name: '', city: '' });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchStudents = async () => {
     const { data, error } = await supabase
@@ -91,6 +92,20 @@ export default function Students() {
     const updated = { ...viewing, ...editForm };
     setViewing(updated);
     setStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+  };
+
+  const handleDeleteStudent = async (studentId) => {
+    if (!window.confirm('Permanently delete this student and all their associated registrations?')) return;
+    setDeleting(true);
+    const { error } = await supabase.from('students').delete().eq('id', studentId);
+    setDeleting(false);
+    if (error) {
+      toast.error('Failed to delete student: ' + error.message);
+      return;
+    }
+    toast.success('Student and associated registrations deleted');
+    closeView();
+    fetchStudents();
   };
 
   const handleExportCSV = () => {
@@ -285,7 +300,13 @@ export default function Students() {
                     <span>{viewing.city || 'No city provided'}</span>
                   </div>
                 </div>
-                <button className="btn-secondary w-full" onClick={() => setEditing(true)}>Edit Details</button>
+                <div className="flex gap-2">
+                  <button className="btn-secondary flex-1" onClick={() => setEditing(true)}>Edit Details</button>
+                  <button className="btn-danger flex-1 flex items-center justify-center gap-1.5" onClick={() => handleDeleteStudent(viewing.id)} disabled={deleting}>
+                    {deleting ? <Spinner size="sm" /> : <Trash2 size={14} />}
+                    {deleting ? 'Deleting…' : 'Delete Student'}
+                  </button>
+                </div>
               </div>
             )}
 
