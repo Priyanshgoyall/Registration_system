@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   CreditCard, Search, Filter, Printer, Download, CheckSquare, Square, RefreshCw,
-  AlertCircle, CheckCircle2, ShieldAlert, FileText, Check, X
+  AlertCircle, CheckCircle2, ShieldAlert, FileText, Check, X, Hash, Layers, SlidersHorizontal
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -31,6 +31,12 @@ export default function IDCards() {
 
   // 1-8 Card Selection State
   const [selectedIds, setSelectedIds] = useState([]);
+
+  // Range Selection States (by card # or by sheet #)
+  const [rangeFrom, setRangeFrom] = useState('');
+  const [rangeTo, setRangeTo] = useState('');
+  const [pageRangeFrom, setPageRangeFrom] = useState('');
+  const [pageRangeTo, setPageRangeTo] = useState('');
 
   // Printing & Generation state
   const [printing, setPrinting] = useState(false);
@@ -155,7 +161,58 @@ export default function IDCards() {
 
   const selectedCount = selectedIds.length;
   const pageCount = Math.ceil(selectedCount / 8);
+  const totalPossiblePages = Math.ceil(filtered.length / 8);
   const isPrintDisabled = selectedCount === 0 || printing;
+
+  // Select by Card Index Range (1-based, e.g. #1 to #16)
+  const handleApplyCardRange = () => {
+    const from = parseInt(rangeFrom, 10);
+    const to = parseInt(rangeTo, 10);
+
+    if (isNaN(from) || isNaN(to) || from < 1 || to < from) {
+      toast.error(`Please enter a valid card range between 1 and ${filtered.length}.`);
+      return;
+    }
+
+    const startIdx = Math.max(0, from - 1);
+    const endIdx = Math.min(filtered.length, to);
+    const selectedChunk = filtered.slice(startIdx, endIdx).map((r) => r.id);
+
+    if (selectedChunk.length === 0) {
+      toast.error('No cards found in the specified range.');
+      return;
+    }
+
+    setSelectedIds(selectedChunk);
+    const sheets = Math.ceil(selectedChunk.length / 8);
+    toast.success(`Selected cards #${from} to #${Math.min(to, filtered.length)} (${selectedChunk.length} cards · ${sheets} A4 sheet${sheets > 1 ? 's' : ''}).`);
+  };
+
+  // Select by A4 Sheet/Page Range (1-based, 8 cards per sheet)
+  const handleApplyPageRange = () => {
+    const fromPage = parseInt(pageRangeFrom, 10);
+    const toPage = parseInt(pageRangeTo, 10);
+
+    if (isNaN(fromPage) || isNaN(toPage) || fromPage < 1 || toPage < fromPage) {
+      toast.error(`Please enter a valid sheet range between 1 and ${totalPossiblePages}.`);
+      return;
+    }
+
+    const startCardIdx = (fromPage - 1) * 8;
+    const endCardIdx = Math.min(filtered.length, toPage * 8);
+
+    if (startCardIdx >= filtered.length) {
+      toast.error(`Sheet ${fromPage} is out of bounds (max sheet is ${totalPossiblePages}).`);
+      return;
+    }
+
+    const selectedChunk = filtered.slice(startCardIdx, endCardIdx).map((r) => r.id);
+    setSelectedIds(selectedChunk);
+    const sheetCount = Math.min(toPage, totalPossiblePages) - fromPage + 1;
+    toast.success(`Selected Sheets #${fromPage} to #${Math.min(toPage, totalPossiblePages)} (${selectedChunk.length} cards · ${sheetCount} A4 sheet${sheetCount > 1 ? 's' : ''}).`);
+  };
+
+
 
   // Split selected IDs into batches of 8 for multi-page A4 printing
   const cardPages = [];
@@ -228,6 +285,95 @@ export default function IDCards() {
           </div>
         </div>
 
+        {/* Range Selection Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-bold text-slate-700 flex items-center gap-1.5">
+              <Layers size={14} className="text-blue-600" />
+              Print Range:
+            </span>
+
+            {/* Range by Student / Card Number (#from to #to) */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleApplyCardRange();
+              }}
+              className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5"
+            >
+              <span className="text-slate-500 font-semibold flex items-center gap-0.5">
+                <Hash size={12} className="text-slate-400" /> Cards:
+              </span>
+              <input
+                type="number"
+                min="1"
+                max={filtered.length || 1}
+                value={rangeFrom}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                placeholder="1"
+                className="w-14 px-1.5 py-0.5 text-center bg-white border border-slate-300 rounded-md font-bold text-slate-800 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              />
+              <span className="text-slate-400 font-medium">to</span>
+              <input
+                type="number"
+                min="1"
+                max={filtered.length || 1}
+                value={rangeTo}
+                onChange={(e) => setRangeTo(e.target.value)}
+                placeholder={String(filtered.length || 8)}
+                className="w-14 px-1.5 py-0.5 text-center bg-white border border-slate-300 rounded-md font-bold text-slate-800 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={filtered.length === 0}
+                className="btn-secondary text-[11px] py-1 px-2.5 font-semibold hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-all ml-0.5"
+              >
+                Apply Range
+              </button>
+            </form>
+
+            {/* Range by A4 Sheet/Page (8 cards per sheet) */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleApplyPageRange();
+              }}
+              className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5"
+            >
+              <span className="text-slate-500 font-semibold flex items-center gap-0.5">
+                <FileText size={12} className="text-slate-400" /> Sheet:
+              </span>
+              <input
+                type="number"
+                min="1"
+                max={totalPossiblePages || 1}
+                value={pageRangeFrom}
+                onChange={(e) => setPageRangeFrom(e.target.value)}
+                placeholder="1"
+                className="w-12 px-1.5 py-0.5 text-center bg-white border border-slate-300 rounded-md font-bold text-slate-800 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              />
+              <span className="text-slate-400 font-medium">to</span>
+              <input
+                type="number"
+                min="1"
+                max={totalPossiblePages || 1}
+                value={pageRangeTo}
+                onChange={(e) => setPageRangeTo(e.target.value)}
+                placeholder={String(totalPossiblePages || 1)}
+                className="w-12 px-1.5 py-0.5 text-center bg-white border border-slate-300 rounded-md font-bold text-slate-800 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={filtered.length === 0}
+                className="btn-secondary text-[11px] py-1 px-2.5 font-semibold hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-all ml-0.5"
+              >
+                Apply Sheets
+              </button>
+            </form>
+          </div>
+
+        </div>
+
         {/* Search & Session Filters */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[240px]">
@@ -278,6 +424,7 @@ export default function IDCards() {
                       title={filtered.length > 0 && filtered.every((r) => selectedIds.includes(r.id)) ? 'Clear Selection' : 'Select All'}
                     />
                   </th>
+                  <th className="table-header w-10 text-center">#</th>
                   <th className="table-header">Registration ID</th>
                   <th className="table-header">Student Name & School</th>
                   <th className="table-header hidden md:table-cell">Phone & City</th>
@@ -286,7 +433,7 @@ export default function IDCards() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((r) => {
+                {filtered.map((r, index) => {
                   const isSelected = selectedIds.includes(r.id);
                   return (
                     <tr
@@ -302,6 +449,9 @@ export default function IDCards() {
                           checked={isSelected}
                           onChange={() => toggleSelect(r.id)}
                         />
+                      </td>
+                      <td className="table-cell text-center text-xs font-mono font-semibold text-slate-400">
+                        {index + 1}
                       </td>
                       <td className="table-cell font-mono font-bold text-blue-700 text-xs">
                         {r.registration_id}
