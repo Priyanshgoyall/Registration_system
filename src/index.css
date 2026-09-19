@@ -119,36 +119,54 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 4mm 4mm;
+    margin: 0;
   }
 
-  html, body {
-    height: auto !important;
-    min-height: auto !important;
+  html,
+  body {
     background: #ffffff !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
   }
 
-  /* Hide UI elements and backgrounds */
-  body * {
-    visibility: hidden !important;
+  /* When printing A4 ID Cards via portal */
+  body:has(.a4-print-portal) #root {
+    display: none !important;
   }
 
-  /* Make ONLY printable elements visible */
-  .printable-card,
-  .printable-card *,
-  .a4-print-sheet,
-  .a4-print-sheet * {
+  .a4-print-portal {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    width: 100% !important;
+  }
+
+  .a4-print-portal,
+  .a4-print-portal * {
     visibility: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
 
-  /* Single card print positioning */
-  .printable-card {
+  /* Single card print mode (e.g. SuccessPage when portal is absent) */
+  body:not(:has(.a4-print-portal)) * {
+    visibility: hidden !important;
+  }
+
+  body:not(:has(.a4-print-portal)) .printable-card,
+  body:not(:has(.a4-print-portal)) .printable-card * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  body:not(:has(.a4-print-portal)) .printable-card {
     position: absolute !important;
     left: 50% !important;
     top: 20mm !important;
@@ -162,23 +180,31 @@
     break-inside: avoid !important;
   }
 
-  /* Multi-card A4 sheet print positioning (2x4 grid, 8 cards max with spacious cutting gaps) */
+  /* Multi-card A4 sheet print positioning (2x4 grid, 8 cards per sheet with clean page breaks) */
   .a4-print-sheet {
-    position: absolute !important;
-    left: 0 !important;
-    right: 0 !important;
-    top: 10mm !important;
+    width: 210mm !important;
+    height: 297mm !important;
     margin: 0 auto !important;
-    padding: 0 !important;
+    padding: 15mm 15mm !important;
+    box-sizing: border-box !important;
     display: grid !important;
     grid-template-columns: repeat(2, 8.5cm) !important;
-    grid-gap: 12mm 10mm !important;
+    grid-template-rows: repeat(4, 5.5cm) !important;
+    grid-gap: 14mm 10mm !important;
     justify-content: center !important;
+    align-content: start !important;
     box-shadow: none !important;
     border: none !important;
     background: transparent !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .a4-print-sheet:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
   }
 
   .printable-card img,
