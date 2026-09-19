@@ -19,71 +19,80 @@ export async function getNextRegistrationId(supabase, { coordinatorUser = null, 
     let coordCode = '01';
 
     if (coordinatorUser) {
-      // Check if email or full_name contains a number (e.g. coordinator1, desk2)
-      const str = `${coordinatorUser.email || ''} ${coordinatorUser.full_name || ''}`;
-      const numMatch = str.match(/(\d+)/);
-      if (numMatch) {
-        coordCode = String(parseInt(numMatch[1], 10)).padStart(2, '0');
-      } else if (coordinatorUser.id) {
-        try {
-          const { data: profs } = await supabase
-            .from('user_profiles')
-            .select('id')
-            .order('created_at', { ascending: true });
-          if (profs && profs.length > 0) {
-            const idx = profs.findIndex((p) => p.id === coordinatorUser.id);
-            if (idx !== -1) {
-              coordCode = String(idx + 1).padStart(2, '0');
+      const email = (coordinatorUser.email || '').toLowerCase();
+      const name = (coordinatorUser.full_name || '').toLowerCase();
+
+      // Check specific coordinator/desk pattern: e.g. coordinator1, coord2, desk3, operator1
+      const patternMatch = `${email} ${name}`.match(/(?:coord(?:inator)?|desk|counter|operator|user)\s*[-_#]?\s*(\d+)/i);
+
+      if (patternMatch) {
+        coordCode = String(parseInt(patternMatch[1], 10)).padStart(2, '0');
+      } else {
+        // Generic 1-2 digit number check (avoiding year numbers like 2026)
+        const generalMatch = `${email} ${name}`.match(/\b(\d{1,2})\b/);
+        if (generalMatch) {
+          coordCode = String(parseInt(generalMatch[1], 10)).padStart(2, '0');
+        } else if (coordinatorUser.id) {
+          try {
+            const { data: profs } = await supabase
+              .from('user_profiles')
+              .select('id')
+              .order('created_at', { ascending: true });
+            if (profs && profs.length > 0) {
+              const idx = profs.findIndex((p) => p.id === coordinatorUser.id);
+              if (idx !== -1) {
+                coordCode = String(idx + 1).padStart(2, '0');
+              }
+            }
+          } catch {
+            // fallback
+          }
+        }
+      }
+    }
+
+    // 2. Count existing registrations made by this specific coordinator
+    let count = 0;
+    let maxExistingNum = 0;
+
+    const { data: allRegs } = await supabase
+      .from('registrations')
+      .select('registration_id, coordinator_id');
+
+    if (allRegs && allRegs.length > 0) {
+      const parsedCoordNum = parseInt(coordCode, 10);
+      const coordRegex = new RegExp(`-(?:${parsedCoordNum}|${coordCode})-(\\d+)$`, 'i');
+
+      for (const r of allRegs) {
+        const isThisCoord = (coordinatorUser?.id && r.coordinator_id === coordinatorUser.id) ||
+                            (r.registration_id && coordRegex.test(r.registration_id));
+        if (isThisCoord) {
+          count++;
+          if (r.registration_id) {
+            const match = r.registration_id.match(/-(\d+)$/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (!isNaN(num) && num > maxExistingNum) {
+                maxExistingNum = num;
+              }
             }
           }
-        } catch {
-          // fallback to 01
         }
       }
     }
 
-    // 2. Query existing registrations to find the count & max sequence number
-    let query = supabase.from('registrations').select('registration_id', { count: 'exact' });
-    if (coordinatorUser?.id) {
-      query = query.eq('coordinator_id', coordinatorUser.id);
-    }
-    const { data, count } = await query;
-
-    let nextNum = (count || 0) + 1;
-
-    // Check existing registration_ids to make sure we don't collide with existing numbers
-    if (data && data.length > 0) {
-      for (const row of data) {
-        if (!row.registration_id) continue;
-        const parts = row.registration_id.split('-');
-        const lastPart = parts[parts.length - 1];
-        const parsed = parseInt(lastPart, 10);
-        if (!isNaN(parsed) && parsed >= nextNum) {
-          nextNum = parsed + 1;
-        }
-      }
-    }
-
+    let nextNum = Math.max(count + 1, maxExistingNum + 1);
     let seqStr = String(nextNum).padStart(3, '0');
     let candidateId = `REG-CBP2026-${coordCode}-${seqStr}`;
 
     // 3. Double-check candidate ID uniqueness across ALL registrations
-    let { data: existing } = await supabase
-      .from('registrations')
-      .select('id')
-      .eq('registration_id', candidateId)
-      .maybeSingle();
-
-    while (existing) {
-      nextNum++;
-      seqStr = String(nextNum).padStart(3, '0');
-      candidateId = `REG-CBP2026-${coordCode}-${seqStr}`;
-      const res = await supabase
-        .from('registrations')
-        .select('id')
-        .eq('registration_id', candidateId)
-        .maybeSingle();
-      existing = res?.data;
+    if (allRegs && allRegs.length > 0) {
+      const existingIds = new Set(allRegs.map((r) => r.registration_id?.toUpperCase()));
+      while (existingIds.has(candidateId.toUpperCase())) {
+        nextNum++;
+        seqStr = String(nextNum).padStart(3, '0');
+        candidateId = `REG-CBP2026-${coordCode}-${seqStr}`;
+      }
     }
 
     return candidateId;
