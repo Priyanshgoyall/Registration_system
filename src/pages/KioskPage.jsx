@@ -1027,7 +1027,7 @@ export default function KioskPage() {
               {step === 1 && (
                 <div className="space-y-6">
                   <div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-1">Student Photo</h2>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-1">Photo</h2>
                     <p className="text-slate-500 text-sm">Take a photo for the student ID card (Optional).</p>
                   </div>
 
