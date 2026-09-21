@@ -4,11 +4,11 @@ import {
   Award, XCircle, Download, Layers, CheckSquare, Square,
   Upload, Eye, ChevronDown, Image as ImageIcon, RefreshCw, AlertTriangle,
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import Modal from '../../components/Modal';
-import Spinner from '../../components/Spinner';
-import { generateCertificateId } from '../../utils/generateId';
-import { generateCertificatePDF, downloadCertificatePDF } from '../../utils/generateCertificatePDF';
+import { supabase } from '@db/client';
+import Modal from '@shared/components/Modal';
+import Spinner from '@shared/components/Spinner';
+import { generateCertificateId } from '@shared/utils/generateId';
+import { generateCertificatePDF, downloadCertificatePDF } from '@admin/utils/generateCertificatePDF';
 
 function validityBadge(status) {
   return status === 'valid'

@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { GraduationCap, LogIn, Eye, EyeOff } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth';
-import Spinner from '../components/Spinner';
+import { supabase } from '@db/client';
+import { useAuth } from '@auth/hooks/useAuth';
+import Spinner from '@shared/components/Spinner';
 
 export default function LoginPage() {
   const navigate = useNavigate();

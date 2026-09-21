@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ClipboardList, CheckCircle, XCircle, Filter, Download, FileText, Trash2, AlertTriangle } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import Spinner from '../../components/Spinner';
-import Modal from '../../components/Modal';
-import { exportToCSV, exportToPDF } from '../../utils/exportCSV';
+import { supabase } from '@db/client';
+import Spinner from '@shared/components/Spinner';
+import Modal from '@shared/components/Modal';
+import { exportToCSV, exportToPDF } from '@shared/utils/exportCSV';
 
 function statusBadge(status) {
   if (status === 'confirmed') return <span className="badge-green">Confirmed</span>;

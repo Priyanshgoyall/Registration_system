@@ -6,13 +6,13 @@ import {
   CreditCard, Search, Filter, Printer, Download, CheckSquare, Square, RefreshCw,
   AlertCircle, CheckCircle2, ShieldAlert, FileText, Check, X, Hash, Layers, SlidersHorizontal
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
-import Modal from '../../components/Modal';
-import Spinner from '../../components/Spinner';
-import RegistrationCard from '../../components/RegistrationCard';
-import { generateQRDataUrl } from '../../utils/generateQR';
-import { downloadAsPDF, generateA4PrintPDF } from '../../utils/generatePDF';
+import { supabase } from '@db/client';
+import { useAuth } from '@auth/hooks/useAuth';
+import Modal from '@shared/components/Modal';
+import Spinner from '@shared/components/Spinner';
+import RegistrationCard from '@shared/components/RegistrationCard';
+import { generateQRDataUrl } from '@shared/utils/generateQR';
+import { downloadAsPDF, generateA4PrintPDF } from '@shared/utils/generatePDF';
 
 // ── Admin ID-Card Management & A4 Printing System ────────────────────────────
 // Accessible exclusively by Main Admin users.

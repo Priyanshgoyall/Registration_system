@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2, CalendarDays, Clock } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import Modal from '../../components/Modal';
-import Spinner from '../../components/Spinner';
+import { supabase } from '@db/client';
+import Modal from '@shared/components/Modal';
+import Spinner from '@shared/components/Spinner';
 
 const STATUS_OPTIONS = ['upcoming', 'active', 'completed', 'cancelled'];
 

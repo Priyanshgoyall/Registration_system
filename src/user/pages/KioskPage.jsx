@@ -7,14 +7,14 @@ import {
   GraduationCap, ChevronRight, ChevronLeft, Camera, CameraOff,
   RefreshCw, CheckCircle, Shield, User, School, Phone, Mail, MapPin,
   Mic, MicOff, AlertCircle, Edit2, Check, X, UserCheck, LogIn, LogOut, Lock, ClipboardList,
-  Eye, EyeOff,
+  Eye, EyeOff, Globe,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth';
-import { generateRegistrationId, getNextRegistrationId } from '../utils/generateId';
-import { normalizePhone, normalizeEmail, normalizeName, normalizeSchool, normalizeCity } from '../utils/speechNormalize';
-import Spinner from '../components/Spinner';
-import Modal from '../components/Modal';
+import { supabase } from '@db/client';
+import { useAuth } from '@auth/hooks/useAuth';
+import { generateRegistrationId, getNextRegistrationId } from '@shared/utils/generateId';
+import { normalizePhone, normalizeEmail, normalizeName, normalizeSchool, normalizeCity } from '@user/utils/speechNormalize';
+import Spinner from '@shared/components/Spinner';
+import Modal from '@shared/components/Modal';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -34,6 +34,13 @@ const VOICE_FIELDS = [
 // ─── Voice state machine ──────────────────────────────────────────────────────
 const MIC_STATE = { IDLE: 'idle', LISTENING: 'listening', PROCESSING: 'processing', CAPTURED: 'captured', COMPLETE: 'complete', ERROR: 'error' };
 
+// ─── Voice Accent & Language options ──────────────────────────────────────────
+const VOICE_LANGUAGES = [
+  { code: 'en-IN', label: 'Indian English', flag: '🇮🇳' },
+  { code: 'hi-IN', label: 'Hindi / Hinglish', flag: '🇮🇳' },
+  { code: 'en-US', label: 'Global English', flag: '🌐' },
+];
+
 function FieldError({ message }) {
   if (!message) return null;
   return (
@@ -48,19 +55,20 @@ function StepIndicator({ step }) {
     <div className="flex items-center justify-center gap-2 mb-8">
       {STEPS.map((label, i) => (
         <div key={label} className="flex items-center gap-2">
-          <div className={`flex items-center gap-1.5 ${i <= step ? 'text-blue-600' : 'text-slate-400'}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border ${i < step
-              ? 'bg-blue-600 border-blue-600 text-white'
-              : i === step
-                ? 'border-blue-500 text-blue-600 bg-blue-50'
-                : 'border-slate-300 text-slate-400 bg-white'
-              }`}>
-              {i < step ? <CheckCircle size={14} /> : i + 1}
+          <div className={`flex items-center gap-2 ${i <= step ? 'text-slate-900' : 'text-slate-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+              i < step
+                ? 'bg-emerald-600 border-2 border-emerald-600 text-white shadow-sm'
+                : i === step
+                  ? 'border-2 border-[#c9a227] text-slate-950 bg-[#c9a227] ring-4 ring-[#c9a227]/25 shadow-md scale-105'
+                  : 'border-2 border-slate-300 text-slate-400 bg-white'
+            }`}>
+              {i < step ? <CheckCircle size={15} /> : i + 1}
             </div>
-            <span className="text-xs font-medium hidden sm:block">{label}</span>
+            <span className={`text-xs font-bold hidden sm:block ${i === step ? 'text-[#1c2541]' : i < step ? 'text-slate-700' : 'text-slate-400'}`}>{label}</span>
           </div>
           {i < STEPS.length - 1 && (
-            <div className={`w-8 h-px ${i < step ? 'bg-blue-500' : 'bg-slate-200'}`} />
+            <div className={`w-8 h-0.5 rounded transition-colors ${i < step ? 'bg-emerald-500' : 'bg-slate-200'}`} />
           )}
         </div>
       ))}
@@ -72,6 +80,7 @@ export default function KioskPage() {
   const navigate = useNavigate();
   const webcamRef = useRef(null);
   const recognitionRef = useRef(null);
+  const autoAdvanceTimerRef = useRef(null);
   const { user, session, profile, role, loading: authLoading } = useAuth();
 
   // ── Dedicated Coordinator Desk Auth state (Independent from Admin Auth Session) ──
@@ -137,6 +146,8 @@ export default function KioskPage() {
 
   // ── Voice state ──
   const [micState, setMicState] = useState(MIC_STATE.IDLE);
+  const isListening = micState === MIC_STATE.LISTENING || micState === MIC_STATE.PROCESSING;
+  const [voiceLang, setVoiceLang] = useState('en-IN');
   const [activeFieldIndex, setActiveFieldIndex] = useState(0);
   const [capturedFields, setCapturedFields] = useState(new Set());
   const [speechSupported] = useState(() => 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
@@ -344,6 +355,34 @@ export default function KioskPage() {
   }, []);
 
   // ─── Core speech recognition for a single field ───────────────────────────────
+  // ─── Safely abort current recognition & cancel auto-advance timers ────────────
+  const stopCurrentRecognition = useCallback(() => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    if (recognitionRef.current) {
+      const rec = recognitionRef.current;
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      try {
+        rec.abort();
+      } catch {
+        // Ignore abort errors
+      }
+      recognitionRef.current = null;
+    }
+  }, []);
+
+  // Clean up speech recognition on component unmount
+  useEffect(() => {
+    return () => {
+      stopCurrentRecognition();
+    };
+  }, [stopCurrentRecognition]);
+
+  // ─── Core speech recognition for a single field ───────────────────────────────
   const listenForField = useCallback((fieldIndex) => {
     if (!speechSupported) {
       toast.error('Speech recognition not supported in this browser.');
@@ -353,140 +392,169 @@ export default function KioskPage() {
     const field = VOICE_FIELDS[fieldIndex];
     if (!field) return;
 
-    recognitionRef.current?.abort();
+    stopCurrentRecognition();
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 3;
-    recognition.continuous = false;
+    setTimeout(() => {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return;
 
-    // Optional JSGF phonetic grammar hints for browser speech engine
-    const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
-    if (SpeechGrammarList) {
-      try {
-        const speechGrammarList = new SpeechGrammarList();
-        const grammar = '#JSGF V1.0; grammar keywords; public <keyword> = Priyansh | Goyal | Jaypee | Raghogarh | Guna | JUET | Bhopal | Indore | Gwalior | Delhi | DPS | KV ;';
-        speechGrammarList.addFromString(grammar, 1);
-        recognition.grammars = speechGrammarList;
-      } catch {
-        // Fallback gracefully if browser grammar list is restricted
+      const recognition = new SpeechRecognition();
+      recognition.lang = voiceLang;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 3;
+      recognition.continuous = false;
+
+      // Optional JSGF phonetic grammar hints for browser speech engine
+      const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+      if (SpeechGrammarList) {
+        try {
+          const speechGrammarList = new SpeechGrammarList();
+          const grammar = '#JSGF V1.0; grammar keywords; public <keyword> = Priyansh | Goyal | Jaypee | Raghogarh | Guna | JUET | JVT | JBT | Bhopal | Indore | Gwalior | Delhi | DPS | KV | Smt | Shri | Mr | Mrs | Dr | Prof | Sheopur | Agarwal | Aggarwal | Sharma | Verma | Gupta | Singh | Mishra | Yadav | Thakur | Choudhary | Poonia | Neiil | Srivastava | Kendriya | Vidyalaya ;';
+          speechGrammarList.addFromString(grammar, 1);
+          recognition.grammars = speechGrammarList;
+        } catch {
+          // Fallback gracefully if browser grammar list is restricted
+        }
       }
-    }
 
-    setMicState(MIC_STATE.LISTENING);
+      setMicState(MIC_STATE.LISTENING);
 
-    recognition.onresult = (event) => {
-      // Evaluate up to 3 speech recognition alternatives for best normalized match
-      let selectedTranscript = '';
-      let bestCleaned = '';
+      recognition.onresult = (event) => {
+        // Evaluate up to 3 speech recognition alternatives for best normalized match
+        let selectedTranscript = '';
+        let bestCleaned = '';
 
-      if (event.results[0]) {
-        for (let a = 0; a < event.results[0].length; a++) {
-          const altText = event.results[0][a]?.transcript?.trim();
-          if (altText) {
-            const candidateCleaned = normalizeForField(field.key, altText);
-            if (candidateCleaned && candidateCleaned.length >= 2) {
-              bestCleaned = candidateCleaned;
-              selectedTranscript = altText;
-              break; // Pick the top valid alternative
+        if (event.results[0]) {
+          for (let a = 0; a < event.results[0].length; a++) {
+            const altText = event.results[0][a]?.transcript?.trim();
+            if (altText) {
+              const candidateCleaned = normalizeForField(field.key, altText);
+              if (candidateCleaned && candidateCleaned.length >= 2) {
+                bestCleaned = candidateCleaned;
+                selectedTranscript = altText;
+                break; // Pick the top valid alternative
+              }
             }
           }
         }
-      }
 
-      if (!bestCleaned && event.results[0]?.[0]?.transcript) {
-        selectedTranscript = event.results[0][0].transcript.trim();
-        bestCleaned = normalizeForField(field.key, selectedTranscript);
-      }
-
-      setMicState(MIC_STATE.PROCESSING);
-
-      const cleaned = bestCleaned;
-
-      // Strict validation for captured voice field
-      let isValid = true;
-      let errorMsg = '';
-
-      if (field.key === 'phone') {
-        const digitsOnly = cleaned.replace(/\D/g, '');
-        if (!digitsOnly || digitsOnly.length !== 10) {
-          isValid = false;
-          errorMsg = 'Please say your 10-digit phone number clearly (numbers only).';
+        if (!bestCleaned && event.results[0]?.[0]?.transcript) {
+          selectedTranscript = event.results[0][0].transcript.trim();
+          bestCleaned = normalizeForField(field.key, selectedTranscript);
         }
-      } else if (field.key === 'email') {
-        if (!cleaned || !cleaned.includes('@') || !cleaned.includes('.')) {
-          isValid = false;
-          errorMsg = "Email incomplete. Please say full email including '@' and domain (e.g. 'priyansh123 at juetguna dot in').";
-        }
-      } else if (field.key === 'name') {
-        if (!cleaned || cleaned.trim().length < 2) {
-          isValid = false;
-          errorMsg = 'Please say your full name clearly.';
-        }
-      } else if (!cleaned || cleaned.trim().length === 0) {
-        isValid = false;
-        errorMsg = `Could not capture ${field.label}. Please try again.`;
-      }
 
-      if (!isValid) {
-        toast.error(errorMsg, { duration: 4000 });
+        setMicState(MIC_STATE.PROCESSING);
+
+        const cleaned = bestCleaned;
+
+        // Strict validation for captured voice field
+        let isValid = true;
+        let errorMsg = '';
+
+        if (field.key === 'phone') {
+          const digitsOnly = cleaned.replace(/\D/g, '');
+          if (!digitsOnly || digitsOnly.length !== 10) {
+            isValid = false;
+            errorMsg = 'Please say your 10-digit phone number clearly (numbers only).';
+          }
+        } else if (field.key === 'email') {
+          if (!cleaned || !cleaned.includes('@') || !cleaned.includes('.')) {
+            isValid = false;
+            errorMsg = "Email incomplete. Please say full email including '@' and domain (e.g. 'priyansh123 at juetguna dot in').";
+          }
+        } else if (field.key === 'name') {
+          if (!cleaned || cleaned.trim().length < 2) {
+            isValid = false;
+            errorMsg = 'Please say your full name clearly.';
+          }
+        } else if (!cleaned || cleaned.trim().length === 0) {
+          isValid = false;
+          errorMsg = `Could not capture ${field.label}. Please try again.`;
+        }
+
+        if (!isValid) {
+          toast.error(errorMsg, { duration: 4000 });
+          setMicState(MIC_STATE.ERROR);
+          return;
+        }
+
+        setForm((f) => ({ ...f, [field.key]: cleaned }));
+        setCapturedFields((prev) => new Set([...prev, field.key]));
+        setMicState(MIC_STATE.CAPTURED);
+
+        const nextIndex = fieldIndex + 1;
+        if (nextIndex < VOICE_FIELDS.length) {
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            setActiveFieldIndex(nextIndex);
+            listenForField(nextIndex);
+          }, 700);
+        } else {
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            setMicState(MIC_STATE.COMPLETE);
+            toast.success('All fields captured! Reviewing details…');
+            setStep(3);
+          }, 800);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        if (event.error === 'no-speech') {
+          toast.error(`No speech detected for ${field.label}. Click mic to try again.`);
+        } else if (event.error !== 'aborted') {
+          toast.error(`Speech recognition error: ${event.error}`);
+        }
         setMicState(MIC_STATE.ERROR);
-        return;
-      }
+      };
 
-      setForm((f) => ({ ...f, [field.key]: cleaned }));
-      setCapturedFields((prev) => new Set([...prev, field.key]));
-      setMicState(MIC_STATE.CAPTURED);
+      recognition.onend = () => {
+        setMicState((prev) => (prev === MIC_STATE.LISTENING ? MIC_STATE.IDLE : prev));
+      };
 
-      const nextIndex = fieldIndex + 1;
-      if (nextIndex < VOICE_FIELDS.length) {
+      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+      } catch {
         setTimeout(() => {
-          setActiveFieldIndex(nextIndex);
-          listenForField(nextIndex);
-        }, 700);
-      } else {
-        setTimeout(() => {
-          setMicState(MIC_STATE.COMPLETE);
-          toast.success('All fields captured! Reviewing details…');
-          setStep(3);
-        }, 800);
+          try {
+            recognition.start();
+          } catch {
+            setMicState(MIC_STATE.ERROR);
+          }
+        }, 100);
       }
-    };
+    }, 60);
+  }, [speechSupported, normalizeForField, stopCurrentRecognition, voiceLang]);
 
-    recognition.onerror = (event) => {
-      if (event.error === 'no-speech') {
-        toast.error(`No speech detected for ${field.label}. Click mic to try again.`);
-      } else if (event.error !== 'aborted') {
-        toast.error(`Speech recognition error: ${event.error}`);
-      }
-      setMicState(MIC_STATE.ERROR);
-    };
-
-    recognition.onend = () => {
-      setMicState((prev) => (prev === MIC_STATE.LISTENING ? MIC_STATE.IDLE : prev));
-    };
-
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch {
-      setMicState(MIC_STATE.ERROR);
-    }
-  }, [speechSupported, normalizeForField]);
+  const stopVoiceRegistration = useCallback(() => {
+    stopCurrentRecognition();
+    setMicState(MIC_STATE.IDLE);
+  }, [stopCurrentRecognition]);
 
   const startVoiceRegistration = useCallback(() => {
-    const firstIncomplete = VOICE_FIELDS.findIndex((f) => !capturedFields.has(f.key));
-    const targetIndex = firstIncomplete !== -1 ? firstIncomplete : 0;
+    let targetIndex = activeFieldIndex;
+    if (targetIndex === undefined || targetIndex < 0 || targetIndex >= VOICE_FIELDS.length) {
+      const firstIncomplete = VOICE_FIELDS.findIndex((f) => !capturedFields.has(f.key));
+      targetIndex = firstIncomplete !== -1 ? firstIncomplete : 0;
+    }
     setActiveFieldIndex(targetIndex);
     listenForField(targetIndex);
-  }, [capturedFields, listenForField]);
+  }, [activeFieldIndex, capturedFields, listenForField]);
+
+  const handleMainMicClick = useCallback(() => {
+    if (isListening) {
+      stopVoiceRegistration();
+    } else {
+      startVoiceRegistration();
+    }
+  }, [isListening, stopVoiceRegistration, startVoiceRegistration]);
 
   const retryField = useCallback((fieldIndex) => {
+    stopCurrentRecognition();
     setActiveFieldIndex(fieldIndex);
-    listenForField(fieldIndex);
-  }, [listenForField]);
+    setTimeout(() => {
+      listenForField(fieldIndex);
+    }, 50);
+  }, [listenForField, stopCurrentRecognition]);
 
   // ─── Validation ───────────────────────────────────────────────────────────────
   const validateDetails = () => {
@@ -759,8 +827,6 @@ export default function KioskPage() {
     return 'Tap to start voice registration';
   };
 
-  const isListening = micState === MIC_STATE.LISTENING || micState === MIC_STATE.PROCESSING;
-
   // ─── RENDER ───────────────────────────────────────────────────────────────────
   if (authLoading) {
     return (
@@ -773,50 +839,50 @@ export default function KioskPage() {
   // ── Coordinator Desk Login Guard ──
   if (!activeDeskUser) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
-        {/* Header */}
-        <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
+      <div className="min-h-screen bg-[#0b132b] flex flex-col">
+        {/* Dark Navy Institutional Header */}
+        <header className="bg-[#1c2541] border-b border-slate-700/60 shadow-lg flex-shrink-0">
           <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/95 border border-slate-200 flex items-center justify-center shadow-sm p-1">
+              <div className="w-10 h-10 rounded-2xl bg-white p-1 shadow-md border border-slate-600/50">
                 <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">CAPACITY BUILDING PROGRAM</h1>
-                <p className="text-xs text-slate-400">REGISTRATION COUNTER & KIOSK SYSTEM</p>
+                <h1 className="text-xl sm:text-2xl font-black text-white tracking-wide">JUET CAPACITY BUILDING PROGRAM</h1>
+                <p className="text-xs text-[#c9a227] font-semibold tracking-wider uppercase">Student Registration System</p>
               </div>
             </div>
             <a
               href="/admin/login"
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-600 transition-all shadow-sm"
               title="Open Admin Portal in new tab"
             >
-              <Shield size={14} className="text-blue-600" /> ADMIN PORTAL
+              <Shield size={14} className="text-[#c9a227]" /> ADMIN PORTAL
             </a>
           </div>
         </header>
 
-        <main className="flex-1 flex items-center justify-center p-6 bg-slate-50">
+        <main className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-md">
             <div className="text-center mb-8">
-              <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
-                <UserCheck size={32} className="text-white" />
+              <div className="w-16 h-16 rounded-2xl bg-[#c9a227] text-slate-950 flex items-center justify-center mx-auto mb-4 shadow-xl shadow-[#c9a227]/20 border border-amber-300">
+                <UserCheck size={32} />
               </div>
-              <h1 className="text-2xl font-bold text-slate-900">Coordinator Desk Login</h1>
-              <p className="text-slate-500 text-sm mt-1">
+              <h1 className="text-2xl font-bold text-white">Coordinator Desk Login</h1>
+              <p className="text-slate-300 text-sm mt-1.5">
                 Enter the approved coordinator email and password provided by the admin to open this counter.
               </p>
             </div>
 
-            <form onSubmit={handleCoordLogin} className="card p-8 space-y-5">
+            <form onSubmit={handleCoordLogin} className="bg-white rounded-2xl p-8 shadow-2xl space-y-5 border border-slate-200">
               <div>
-                <label className="label text-sm font-semibold text-slate-700" htmlFor="coord-email">Coordinator Approved Email *</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="coord-email">Coordinator Approved Email *</label>
                 <input
                   id="coord-email"
                   type="email"
-                  className="input-field"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#c9a227] focus:bg-white transition-all text-sm"
                   placeholder="approved-coordinator@example.com"
                   value={coordEmail}
                   onChange={(e) => setCoordEmail(e.target.value)}
@@ -826,12 +892,12 @@ export default function KioskPage() {
                 />
               </div>
               <div>
-                <label className="label text-sm font-semibold text-slate-700" htmlFor="coord-password">Password (Given by Admin) *</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="coord-password">Password (Given by Admin) *</label>
                 <div className="relative">
                   <input
                     id="coord-password"
                     type={showCoordPass ? 'text' : 'password'}
-                    className="input-field pr-11"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#c9a227] focus:bg-white transition-all text-sm pr-11"
                     placeholder="••••••••"
                     value={coordPass}
                     onChange={(e) => setCoordPass(e.target.value)}
@@ -857,7 +923,7 @@ export default function KioskPage() {
                 </div>
               )}
 
-              <button type="submit" className="btn-primary w-full" disabled={loggingInCoord || isLoginLocked}>
+              <button type="submit" className="w-full py-3 bg-[#1c2541] hover:bg-[#0b132b] active:bg-black text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50" disabled={loggingInCoord || isLoginLocked}>
                 {loggingInCoord ? <Spinner size="sm" /> : <LogIn size={16} />}
                 {loggingInCoord ? 'Authenticating Desk…' : isLoginLocked ? `Locked (${loginLockSecondsLeft}s)` : 'Start Processing Registrations'}
               </button>
@@ -869,48 +935,48 @@ export default function KioskPage() {
   }
 
   return (
-    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#f5f4f0] flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
+      <header className="bg-[#1c2541] border-b border-slate-700 shadow-md flex-shrink-0">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-3.5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/95 border border-slate-200 flex items-center justify-center shadow-sm p-1">
+            <div className="w-10 h-10 rounded-2xl bg-white p-1 shadow-md border border-slate-600/50">
               <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">CAPACITY BUILDING PROGRAM</h1>
-              <p className="text-xs text-slate-400 font-medium">Registration Counter & Kiosk System</p>
+              <h1 className="text-lg sm:text-xl font-black text-white tracking-wide">JUET CAPACITY BUILDING PROGRAM</h1>
+              <p className="text-xs text-[#c9a227] font-semibold tracking-wider uppercase">Student Registration Kiosk</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <a
               href="/admin/login"
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-600 transition-all"
               title="Open Admin Portal in new tab"
             >
-              <Shield size={14} className="text-blue-600" /> Admin Portal
+              <Shield size={14} className="text-[#c9a227]" /> Admin Portal
             </a>
             <Link
               to="/verify"
-              className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-600 transition-all"
               title="Verify Certificate"
             >
-              <Shield size={14} className="text-blue-600" /> Verify Certificate
+              <Shield size={14} className="text-[#c9a227]" /> Verify
             </Link>
             <button
               onClick={openCheckRegs}
-              className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-[#c9a227] text-xs font-bold rounded-xl border border-[#c9a227]/40 transition-all"
               title="Check Total Registrations"
             >
-              <ClipboardList size={14} /> Check Registrations
+              <ClipboardList size={14} /> Registrations
             </button>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-700/50">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               Desk Active: {activeDeskUser?.full_name || activeDeskUser?.email}
-              <span className="px-1.5 py-0.5 rounded bg-emerald-200/80 text-emerald-900 font-mono text-[11px] font-bold">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-800/80 text-emerald-100 font-mono text-[11px] font-bold">
                 Desk #{(() => {
                   if (!activeDeskUser) return '01';
                   const str = `${activeDeskUser.email || ''} ${activeDeskUser.full_name || ''}`;
@@ -921,10 +987,10 @@ export default function KioskPage() {
             </span>
             <button
               onClick={handleDeskLogout}
-              className="text-xs text-slate-500 hover:text-red-600 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-slate-100"
+              className="text-xs text-slate-400 hover:text-red-400 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-slate-800"
               title="Sign Out Counter Operator"
             >
-              <LogOut size={13} /> Desk Logout
+              <LogOut size={13} /> Logout
             </button>
           </div>
         </div>
@@ -932,36 +998,43 @@ export default function KioskPage() {
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
         {/* Fixed Info Sidebar — desktop only */}
-        <aside className="hidden lg:flex flex-col justify-center bg-gradient-to-b from-blue-700 to-blue-800 text-white px-10 py-12 lg:w-80 xl:w-96 flex-shrink-0 h-full overflow-hidden">
-          <div className="w-14 h-14 bg-white/95 rounded-2xl flex items-center justify-center mb-6 shadow-md p-1.5">
-            <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
-          </div>
-          <h2 className="text-2xl font-bold mb-3">Register for a Program</h2>
-          <p className="text-blue-200 text-sm leading-relaxed mb-8">
-            Fill your details or use the 1-click voice assistant. Your ID card will be ready immediately upon submission.
-          </p>
-          <div className="space-y-4">
-            {[
-              { step: '1', label: 'Select Session', desc: 'Choose active program session' },
-              { step: '2', label: 'Take Photo', desc: 'Optional — for ID card' },
-              { step: '3', label: 'Fill / Voice Details', desc: 'Name, Gmail, Phone, School, City' },
-              { step: '4', label: 'Review & Submit', desc: 'Confirm and download card' },
-            ].map(({ step: s, label, desc }) => (
-              <div key={s} className="flex items-start gap-3">
-                <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mt-0.5 ${Number(s) <= step + 1 ? 'bg-white text-blue-700' : 'bg-blue-600/60 text-blue-200'
-                  }`}>{s}</div>
-                <div>
-                  <p className={`text-sm font-semibold ${Number(s) <= step + 1 ? 'text-white' : 'text-blue-300'}`}>{label}</p>
-                  <p className="text-xs text-blue-300">{desc}</p>
+        <aside className="hidden lg:flex flex-col justify-between bg-gradient-to-b from-[#1c2541] to-[#0b132b] text-white px-8 py-10 lg:w-80 xl:w-96 flex-shrink-0 h-full overflow-hidden border-r border-slate-700/50">
+          <div>
+            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-xl p-1.5 border border-slate-200">
+              <img src="/juet-logo.png" alt="JUET Logo" className="w-full h-full object-contain" />
+            </div>
+            <h2 className="text-2xl font-black tracking-tight text-white mb-2">Student Registration</h2>
+            <p className="text-slate-300 text-sm leading-relaxed mb-8">
+              Fill details or use our 1-click voice assistant. Your official registration ID card will be issued immediately upon completion.
+            </p>
+            <div className="space-y-4">
+              {[
+                { step: '1', label: 'Select Session', desc: 'Choose active program session' },
+                { step: '2', label: 'Take Photo', desc: 'Optional — for student ID card' },
+                { step: '3', label: 'Student Details', desc: 'Voice recognition or manual input' },
+                { step: '4', label: 'Review & Submit', desc: 'Confirm and print ID card' },
+              ].map(({ step: s, label, desc }) => (
+                <div key={s} className="flex items-start gap-3">
+                  <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mt-0.5 transition-all ${
+                    Number(s) - 1 === step
+                      ? 'bg-[#c9a227] text-slate-950 ring-4 ring-[#c9a227]/30 shadow-md scale-105'
+                      : Number(s) - 1 < step
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-slate-700/60 text-slate-400'
+                    }`}>{Number(s) - 1 < step ? '✓' : s}</div>
+                  <div>
+                    <p className={`text-sm font-bold ${Number(s) - 1 === step ? 'text-[#c9a227]' : Number(s) - 1 < step ? 'text-emerald-400' : 'text-slate-400'}`}>{label}</p>
+                    <p className="text-xs text-slate-400">{desc}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-          <div className="mt-8 pt-5 border-t border-blue-600/40 text-xs text-blue-200/90 space-y-1">
-            <p className="font-bold text-white text-xs">Capacity Building Programm</p>
-            <p className="text-[11px] text-blue-200">Jaypee University of Engineering & Technology, Guna</p>
-            <p className="text-[10px] text-blue-300/80 pt-1">Designed & Developed by Priyansh goyal & Team</p>
-            <p className="text-[10px] text-blue-300/60">© {new Date().getFullYear()} Priyansh goyal. All Rights Reserved.</p>
+          <div className="pt-6 border-t border-slate-700/60 text-xs text-slate-400 space-y-1">
+            <p className="font-bold text-white text-xs">Capacity Building Program</p>
+            <p className="text-[11px] text-slate-300">Jaypee University of Engineering & Technology, Guna</p>
+            <p className="text-[10px] text-[#c9a227]/80 pt-1">Designed & Developed by Priyansh Goyal & Team</p>
+            <p className="text-[10px] text-slate-500">© {new Date().getFullYear()} Priyansh Goyal. All Rights Reserved.</p>
           </div>
         </aside>
 
@@ -970,21 +1043,21 @@ export default function KioskPage() {
           <div className="w-full max-w-xl">
             <StepIndicator step={step} />
 
-            <div className="card p-8 shadow-xl">
+            <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-2xl border border-slate-200/80">
 
               {/* ── Step 0: Select Session ── */}
               {step === 0 && (
                 <div className="space-y-6">
                   <div>
-                    <h1 className="text-2xl font-bold text-slate-900 mb-1">Select a Session</h1>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight mb-1">Select a Session</h1>
                     <p className="text-slate-500 text-sm">Choose the active program session to register the student.</p>
                   </div>
                   {loadingSessions ? (
                     <div className="flex justify-center py-10"><Spinner /></div>
                   ) : sessions.length === 0 ? (
-                    <div className="text-center py-10">
-                      <p className="text-slate-500 font-semibold">No active sessions available today.</p>
-                      <p className="text-slate-400 text-xs mt-1">Sessions expire automatically at 00:00 AM on their End Date.</p>
+                    <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+                      <p className="text-slate-700 font-bold">No active sessions available today.</p>
+                      <p className="text-slate-500 text-xs mt-1">Sessions expire automatically at 00:00 AM on their End Date.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -992,19 +1065,19 @@ export default function KioskPage() {
                         <button
                           key={s.id}
                           onClick={() => setForm((f) => ({ ...f, sessionId: s.id }))}
-                          className={`w-full text-left p-4 rounded-xl border-2 transition-all ${form.sessionId === s.id
-                            ? 'border-blue-500 bg-blue-50 text-slate-900'
+                          className={`w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 ${form.sessionId === s.id
+                            ? 'border-[#1c2541] bg-[#1c2541]/5 text-slate-900 shadow-md ring-2 ring-[#1c2541]/10'
                             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                             }`}
                         >
                           <div className="flex items-center justify-between">
-                            <p className="font-semibold">{s.name}</p>
+                            <p className="font-bold text-base text-slate-900">{s.name}</p>
                             {form.sessionId === s.id && (
-                              <CheckCircle size={18} className="text-blue-600 flex-shrink-0" />
+                              <CheckCircle size={20} className="text-[#c9a227] flex-shrink-0 fill-[#1c2541]" />
                             )}
                           </div>
-                          {s.description && <p className="text-sm text-slate-500 mt-0.5">{s.description}</p>}
-                          <p className="text-xs text-slate-400 mt-1">
+                          {s.description && <p className="text-sm text-slate-600 mt-1">{s.description}</p>}
+                          <p className="text-xs text-slate-400 mt-2 font-medium">
                             {new Date(s.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             {' — '}
                             {new Date(s.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -1014,11 +1087,11 @@ export default function KioskPage() {
                     </div>
                   )}
                   <button
-                    className="btn-primary w-full"
+                    className="btn-navy w-full py-3.5 text-base"
                     disabled={!form.sessionId}
                     onClick={() => setStep(1)}
                   >
-                    Continue to Photo <ChevronRight size={16} />
+                    Continue to Photo <ChevronRight size={18} />
                   </button>
                 </div>
               )}
@@ -1027,18 +1100,18 @@ export default function KioskPage() {
               {step === 1 && (
                 <div className="space-y-6">
                   <div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-1">Photo</h2>
-                    <p className="text-slate-500 text-sm">Take a photo for the student ID card (Optional).</p>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-1">Take Photo</h2>
+                    <p className="text-slate-500 text-sm">Capture a clear photo for the official student ID card (Optional).</p>
                   </div>
 
-                  <div className="flex flex-col items-center gap-4">
+                  <div className="flex flex-col items-center gap-4 py-2">
                     {photoDataUrl ? (
-                      <div className="relative">
-                        <img src={photoDataUrl} alt="Captured" className="w-44 h-52 object-cover rounded-2xl border-4 border-blue-500 shadow-md" />
-                        <span className="absolute bottom-2 right-2 bg-emerald-500 text-white p-1 rounded-full"><CheckCircle size={16} /></span>
+                      <div className="relative group">
+                        <img src={photoDataUrl} alt="Captured" className="w-48 h-56 object-cover rounded-2xl border-4 border-[#1c2541] shadow-xl" />
+                        <span className="absolute bottom-3 right-3 bg-emerald-600 text-white p-1.5 rounded-full shadow-md"><CheckCircle size={18} /></span>
                       </div>
                     ) : cameraEnabled ? (
-                      <div className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-slate-300 bg-black">
+                      <div className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-[#1c2541] bg-black shadow-xl relative">
                         <Webcam
                           audio={false}
                           ref={webcamRef}
@@ -1046,39 +1119,40 @@ export default function KioskPage() {
                           className="w-full h-auto -scale-x-1"
                           style={{ transform: 'scaleX(-1)' }}
                         />
+                        <div className="absolute inset-0 border-2 border-dashed border-white/40 pointer-events-none rounded-2xl m-4" />
                       </div>
                     ) : (
-                      <div className="w-44 h-52 bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
-                        <Camera size={36} className="mb-2" />
-                        <span className="text-xs text-center px-4">Camera disabled</span>
+                      <div className="w-48 h-56 bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 gap-2">
+                        <Camera size={40} className="text-slate-400" />
+                        <span className="text-xs text-center px-4 font-semibold text-slate-500">Camera preview off</span>
                       </div>
                     )}
 
-                    <div className="flex gap-3 flex-wrap justify-center">
+                    <div className="flex gap-3 flex-wrap justify-center pt-2">
                       {!cameraEnabled && !photoDataUrl && (
-                        <button className="btn-primary" onClick={() => setCameraEnabled(true)}>
+                        <button className="btn-navy" onClick={() => setCameraEnabled(true)}>
                           <Camera size={16} /> Enable Camera
                         </button>
                       )}
                       {cameraEnabled && !photoDataUrl && (
-                        <button className="btn-primary" onClick={capture}>
+                        <button className="btn-gold" onClick={capture}>
                           <Camera size={16} /> Capture Photo
                         </button>
                       )}
                       {photoDataUrl && (
                         <button className="btn-secondary" onClick={retake}>
-                          <RefreshCw size={16} /> Retake
+                          <RefreshCw size={16} /> Retake Photo
                         </button>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex justify-between">
+                  <div className="flex justify-between pt-4 border-t border-slate-100">
                     <button className="btn-secondary" onClick={() => setStep(0)}>
                       <ChevronLeft size={16} /> Back
                     </button>
-                    <button className="btn-primary" onClick={() => { setActiveFieldIndex(0); setCapturedFields(new Set()); setMicState(MIC_STATE.IDLE); setStep(2); }}>
-                      {photoDataUrl ? 'Continue' : 'Skip Photo'} <ChevronRight size={16} />
+                    <button className="btn-navy" onClick={() => { setActiveFieldIndex(0); setCapturedFields(new Set()); setMicState(MIC_STATE.IDLE); setStep(2); }}>
+                      {photoDataUrl ? 'Continue to Details' : 'Skip Photo'} <ChevronRight size={16} />
                     </button>
                   </div>
                 </div>
@@ -1087,38 +1161,61 @@ export default function KioskPage() {
               {/* ── Step 2: Voice & Self Details Entry ── */}
               {step === 2 && (
                 <div className="space-y-6">
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-4">
                     <div>
-                      <h2 className="text-2xl font-bold text-slate-900 mb-1">Student Details</h2>
+                      <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-1">Student Details</h2>
                       <p className="text-slate-500 text-sm">
-                        Fill details below or tap the microphone to speak naturally.
+                        Fill details below or tap the mic on any field to speak naturally.
                       </p>
                     </div>
                     {photoDataUrl && (
-                      <img src={photoDataUrl} alt="Photo" className="w-12 h-14 object-cover rounded-lg border-2 border-blue-300 flex-shrink-0" />
+                      <img src={photoDataUrl} alt="Photo" className="w-12 h-14 object-cover rounded-xl border-2 border-[#1c2541] shadow-sm flex-shrink-0" />
                     )}
                   </div>
 
-                  {/* ── 1-Click Voice Assistant ── */}
+                  {/* ── 1-Click Voice Assistant Bar ── */}
                   {speechSupported && (
-                    <div className="flex flex-col items-center gap-3 py-3 bg-blue-50/70 border border-blue-100 rounded-2xl p-4">
+                    <div className="flex flex-col items-center gap-3 bg-[#1c2541] text-white rounded-2xl p-5 shadow-lg border border-slate-700">
+                      {/* Accent & Language Toggle Bar */}
+                      <div className="flex items-center justify-between gap-2 w-full flex-wrap bg-slate-900/80 p-2 rounded-xl border border-slate-700/80">
+                        <span className="text-xs font-bold text-slate-300 px-1 flex items-center gap-1.5">
+                          <Globe size={14} className="text-[#c9a227]" /> Voice Accent:
+                        </span>
+                        <div className="flex gap-1 flex-wrap">
+                          {VOICE_LANGUAGES.map((l) => (
+                            <button
+                              key={l.code}
+                              type="button"
+                              onClick={() => setVoiceLang(l.code)}
+                              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+                                voiceLang === l.code
+                                  ? 'bg-[#c9a227] text-slate-950 shadow-sm'
+                                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                              }`}
+                            >
+                              <span>{l.flag}</span> <span>{l.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <button
                         type="button"
-                        onClick={startVoiceRegistration}
-                        className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 shadow-md ${isListening
-                          ? 'bg-red-500 text-white shadow-red-300 scale-105'
+                        onClick={handleMainMicClick}
+                        className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl mt-1 ${isListening
+                          ? 'bg-red-600 text-white shadow-red-500/50 scale-110 ring-4 ring-red-400/40'
                           : micState === MIC_STATE.COMPLETE
-                            ? 'bg-emerald-500 text-white shadow-emerald-200'
-                            : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105'
+                            ? 'bg-emerald-600 text-white shadow-emerald-500/30'
+                            : 'bg-[#c9a227] text-slate-950 hover:bg-amber-400 hover:scale-105 shadow-amber-500/20'
                           }`}
                       >
-                        {isListening ? <MicOff size={24} /> : <Mic size={24} />}
+                        {isListening ? <MicOff size={26} /> : <Mic size={26} />}
                         {isListening && (
-                          <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-40" />
+                          <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-50" />
                         )}
                       </button>
 
-                      <p className={`text-xs font-semibold text-center ${isListening ? 'text-red-600' : micState === MIC_STATE.COMPLETE ? 'text-emerald-600' : 'text-slate-600'
+                      <p className={`text-xs font-bold text-center tracking-wide ${isListening ? 'text-red-400' : micState === MIC_STATE.COMPLETE ? 'text-emerald-400' : 'text-slate-300'
                         }`}>
                         {getMicLabel()}
                       </p>
@@ -1126,7 +1223,7 @@ export default function KioskPage() {
                   )}
 
                   {/* ── Prominent Large-Title Fields for Self Filling with Auto Scroll ── */}
-                  <div className="space-y-6 pt-2">
+                  <div className="space-y-4 pt-1">
                     {VOICE_FIELDS.map((field, i) => {
                       const isCurrent = i === activeFieldIndex;
                       const isActiveListening = isCurrent && isListening;
@@ -1136,56 +1233,83 @@ export default function KioskPage() {
                         <div
                           key={field.key}
                           ref={(el) => (fieldRefs.current[i] = el)}
-                          className={`p-4 rounded-2xl border transition-all duration-300 ${isActiveListening
-                            ? 'bg-red-50/60 border-red-400 ring-2 ring-red-200 shadow-md'
+                          onClick={() => setActiveFieldIndex(i)}
+                          className={`p-4 rounded-2xl border-2 cursor-pointer transition-all duration-300 ${isActiveListening
+                            ? 'bg-red-50/70 border-red-500 ring-4 ring-red-400/20 shadow-lg'
                             : isCurrent
-                              ? 'bg-blue-50/50 border-blue-500 ring-2 ring-blue-200 shadow-md'
-                              : 'bg-slate-50/50 border-slate-200/80'
+                              ? 'bg-amber-50/40 border-[#c9a227] ring-2 ring-[#c9a227]/20 shadow-md'
+                              : isDone
+                                ? 'bg-emerald-50/30 border-emerald-500/70 hover:border-emerald-500'
+                                : 'bg-white border-slate-200/90 hover:border-slate-300 shadow-sm'
                             }`}
                         >
-                          {/* Prominent Large Title */}
-                          <label
-                            className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2 mb-2"
-                            htmlFor={`voice-${field.key}`}
-                          >
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isCurrent ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600'
-                              }`}>
-                              <Icon size={16} />
-                            </div>
-                            <span>{field.label} *</span>
-                            {isDone && <Check size={16} className="text-emerald-600 ml-auto" />}
-                          </label>
+                          {/* Prominent Large Title Header */}
+                          <div className="flex items-center justify-between mb-2 gap-2">
+                            <label
+                              className="text-base font-black text-slate-800 flex items-center gap-2 cursor-pointer"
+                              htmlFor={`voice-${field.key}`}
+                            >
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                                isCurrent
+                                  ? 'bg-[#1c2541] text-[#c9a227]'
+                                  : isDone
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                <Icon size={16} />
+                              </div>
+                              <span>{field.label} *</span>
+                              {isDone && <Check size={16} className="text-emerald-600 ml-1 stroke-[3]" />}
+                            </label>
 
-                          <div className="relative">
+                            {speechSupported && (
+                              <button
+                                type="button"
+                                title={isDone ? `Re-record ${field.label}` : `Speak ${field.label}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  retryField(i);
+                                }}
+                                className={`px-3 py-1 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all ${
+                                  isActiveListening
+                                    ? 'bg-red-600 text-white animate-pulse shadow-md'
+                                    : isCurrent
+                                      ? 'bg-[#1c2541] text-white hover:bg-slate-800 shadow-sm'
+                                      : isDone
+                                        ? 'bg-emerald-100 text-emerald-800 hover:bg-[#1c2541] hover:text-white border border-emerald-300'
+                                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                                }`}
+                              >
+                                <Mic size={13} />
+                                <span>{isActiveListening ? 'Listening…' : isDone ? 'Re-speak' : 'Speak'}</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="relative" onClick={(e) => e.stopPropagation()}>
                             <input
                               id={`voice-${field.key}`}
                               className={
                                 isDone
-                                  ? 'w-full bg-emerald-50 border-2 border-emerald-400 rounded-xl px-4 py-3 text-slate-900 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all'
+                                  ? 'w-full bg-emerald-50/60 border-2 border-emerald-500 rounded-xl px-4 py-3 text-slate-900 text-base font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all'
                                   : isActiveListening
-                                    ? 'w-full bg-white border-2 border-red-400 rounded-xl px-4 py-3 text-slate-900 text-base font-medium focus:outline-none focus:ring-2 focus:ring-red-400 transition-all shadow-md'
+                                    ? 'w-full bg-white border-2 border-red-500 rounded-xl px-4 py-3 text-slate-900 text-base font-bold focus:outline-none focus:ring-2 focus:ring-red-400 transition-all shadow-md'
                                     : fieldErrors[field.key]
-                                      ? 'w-full bg-white border-2 border-red-400 rounded-xl px-4 py-3 text-slate-900 text-base focus:outline-none focus:ring-2 focus:ring-red-400 transition-all'
-                                      : 'w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-base placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all font-medium'
+                                      ? 'w-full bg-white border-2 border-red-400 rounded-xl px-4 py-3 text-slate-900 text-base font-semibold focus:outline-none focus:ring-2 focus:ring-red-400 transition-all'
+                                      : 'w-full bg-slate-50/80 border-2 border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-base font-semibold placeholder-slate-400 focus:bg-white focus:border-[#1c2541] focus:outline-none focus:ring-2 focus:ring-[#1c2541]/20 transition-all'
                               }
-                              placeholder={isActiveListening ? `🎤 ${field.hint}` : field.placeholder}
+                              placeholder={isActiveListening ? `🎤 Listening for ${field.label}…` : field.placeholder}
                               value={form[field.key]}
                               onFocus={() => setActiveFieldIndex(i)}
                               onChange={(e) => {
-                                setForm((f) => ({ ...f, [field.key]: e.target.value }));
+                                const val = e.target.value;
+                                setForm((f) => ({ ...f, [field.key]: val }));
                                 setFieldErrors((er) => ({ ...er, [field.key]: undefined }));
+                                if (val.trim()) {
+                                  setCapturedFields((prev) => new Set([...prev, field.key]));
+                                }
                               }}
                             />
-                            {speechSupported && isDone && !isListening && (
-                              <button
-                                type="button"
-                                title="Re-record voice for this field"
-                                onClick={() => retryField(i)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-blue-600 transition-colors"
-                              >
-                                <Mic size={16} />
-                              </button>
-                            )}
                           </div>
                           <FieldError message={fieldErrors[field.key]} />
                           <p className="text-xs text-slate-400 mt-1.5 font-medium">{field.hint}</p>
@@ -1194,15 +1318,15 @@ export default function KioskPage() {
                     })}
                   </div>
 
-                  <div className="flex justify-between pt-4">
+                  <div className="flex justify-between pt-4 border-t border-slate-100">
                     <button
                       className="btn-secondary"
-                      onClick={() => { recognitionRef.current?.abort(); setMicState(MIC_STATE.IDLE); setStep(1); }}
+                      onClick={() => { stopCurrentRecognition(); setMicState(MIC_STATE.IDLE); setStep(1); }}
                     >
                       <ChevronLeft size={16} /> Back
                     </button>
                     <button
-                      className="btn-primary"
+                      className="btn-navy"
                       onClick={() => { if (validateDetails()) setStep(3); }}
                     >
                       Review Details <ChevronRight size={16} />
@@ -1215,8 +1339,8 @@ export default function KioskPage() {
               {step === 3 && (
                 <div className="space-y-6">
                   <div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-1">Confirm Registration</h2>
-                    <p className="text-slate-500 text-sm">Review details — click any row to modify manually.</p>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-1">Confirm Registration</h2>
+                    <p className="text-slate-500 text-sm">Review student details — tap any row to make manual edits.</p>
                   </div>
 
                   {photoDataUrl && (
@@ -1224,7 +1348,7 @@ export default function KioskPage() {
                       <img
                         src={photoDataUrl}
                         alt="Student"
-                        className="w-20 h-24 object-cover rounded-xl border-2 border-blue-300 shadow-sm"
+                        className="w-24 h-28 object-cover rounded-2xl border-4 border-[#1c2541] shadow-md"
                       />
                     </div>
                   )}
@@ -1249,24 +1373,24 @@ export default function KioskPage() {
                         onCancel={() => setEditingField(null)}
                       />
                     ))}
-                    <ConfirmRow label="Photo" value={photoDataUrl ? '✓ Captured' : 'None (optional)'} readOnly />
+                    <ConfirmRow label="Photo" value={photoDataUrl ? '✓ Photo Captured' : 'None (Optional)'} readOnly />
                   </div>
 
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 pt-2">
                     <button
-                      className="btn-secondary flex-1"
+                      className="btn-secondary flex-1 py-3"
                       onClick={() => { setEditingField(null); setStep(2); }}
                       disabled={submitting}
                     >
-                      <ChevronLeft size={16} /> Edit
+                      <ChevronLeft size={16} /> Edit Details
                     </button>
                     <button
-                      className="btn-primary flex-1"
+                      className="btn-gold flex-1 py-3 text-base"
                       onClick={handleSubmit}
                       disabled={submitting || !!editingField}
                     >
-                      {submitting ? <Spinner size="sm" /> : <CheckCircle size={16} />}
-                      {submitting ? 'Submitting…' : 'Confirm & Submit'}
+                      {submitting ? <Spinner size="sm" /> : <CheckCircle size={18} />}
+                      {submitting ? 'Submitting…' : 'Confirm & Register Student'}
                     </button>
                   </div>
                 </div>

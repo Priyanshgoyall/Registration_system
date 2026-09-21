@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { CheckSquare, CalendarDays } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import Spinner from '../../components/Spinner';
+import { supabase } from '@db/client';
+import Spinner from '@shared/components/Spinner';
 
 const STATUS_OPTS = ['present', 'absent', 'late'];
 

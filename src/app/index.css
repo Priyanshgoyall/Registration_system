@@ -79,6 +79,51 @@
   .sidebar-link-active {
     @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-blue-700 bg-blue-50 border border-blue-200 font-semibold text-sm;
   }
+
+  /* ── User/Student Panel Redesign Components ── */
+  .bg-kiosk-page {
+    background-color: #0b132b;
+  }
+  .bg-kiosk-sidebar {
+    background: linear-gradient(180deg, #1c2541 0%, #0b132b 100%);
+  }
+  .bg-kiosk-nav {
+    background-color: #1c2541;
+  }
+  
+  .kiosk-card {
+    @apply bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden transition-all duration-300;
+  }
+
+  .field-card {
+    @apply relative p-4 rounded-xl border-2 border-slate-200 bg-white transition-all duration-200 cursor-pointer hover:border-slate-300 hover:shadow-md;
+  }
+  .field-card-active {
+    @apply relative p-4 rounded-xl border-2 border-amber-500 bg-amber-50/30 shadow-md ring-2 ring-amber-400/20 transition-all duration-200 cursor-pointer;
+  }
+  .field-card-done {
+    @apply relative p-4 rounded-xl border-2 border-emerald-500 bg-emerald-50/20 transition-all duration-200 cursor-pointer;
+  }
+  .field-card-listening {
+    @apply relative p-4 rounded-xl border-2 border-indigo-500 bg-indigo-50/40 shadow-lg ring-4 ring-indigo-500/20 transition-all duration-200 cursor-pointer animate-pulse;
+  }
+
+  .btn-navy {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1c2541] hover:bg-[#0b132b] active:bg-[#000000] text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#c9a227] hover:bg-[#b08d1e] active:bg-[#967717] text-slate-900 font-bold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .step-dot {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 bg-slate-200 text-slate-500;
+  }
+  .step-dot-active {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 bg-[#c9a227] text-slate-950 ring-4 ring-[#c9a227]/30 shadow-md scale-110;
+  }
+  .step-dot-done {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 bg-emerald-600 text-white shadow-sm;
+  }
 }
 
 @layer utilities {

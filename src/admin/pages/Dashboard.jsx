@@ -4,8 +4,8 @@ import {
   Users, CalendarDays, ClipboardList, Award,
   TrendingUp, ArrowRight, UserCheck, Clock,
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import Spinner from '../../components/Spinner';
+import { supabase } from '@db/client';
+import Spinner from '@shared/components/Spinner';
 
 function StatCard({ icon: Icon, label, value, color, loading, trend }) {
   return (

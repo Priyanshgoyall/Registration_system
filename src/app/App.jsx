@@ -1,22 +1,22 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
-import ProtectedRoute from './components/ProtectedRoute';
-import AdminLayout from './components/AdminLayout';
+import ProtectedRoute from '@auth/components/ProtectedRoute';
+import AdminLayout from '@admin/components/AdminLayout';
 
-import KioskPage from './pages/KioskPage';
-import SuccessPage from './pages/SuccessPage';
-import VerifyPage from './pages/VerifyPage';
-import LoginPage from './pages/LoginPage';
+import KioskPage from '@user/pages/KioskPage';
+import SuccessPage from '@user/pages/SuccessPage';
+import VerifyPage from '@user/pages/VerifyPage';
+import LoginPage from '@auth/pages/LoginPage';
 
-import Dashboard from './pages/admin/Dashboard';
-import Sessions from './pages/admin/Sessions';
-import Students from './pages/admin/Students';
-import Registrations from './pages/admin/Registrations';
-import Attendance from './pages/admin/Attendance';
-import Certificates from './pages/admin/Certificates';
-import Coordinators from './pages/admin/Coordinators';
-import IDCards from './pages/admin/IDCards';
+import Dashboard from '@admin/pages/Dashboard';
+import Sessions from '@admin/pages/Sessions';
+import Students from '@admin/pages/Students';
+import Registrations from '@admin/pages/Registrations';
+import Attendance from '@admin/pages/Attendance';
+import Certificates from '@admin/pages/Certificates';
+import Coordinators from '@admin/pages/Coordinators';
+import IDCards from '@admin/pages/IDCards';
 
 function AdminPages({ element }) {
   return (

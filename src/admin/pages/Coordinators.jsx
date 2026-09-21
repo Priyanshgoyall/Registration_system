@@ -5,11 +5,11 @@ import {
   UserCog, Plus, Eye, EyeOff, RefreshCw, ShieldOff, Shield, AlertTriangle, Trash2,
   ClipboardList, Search, Calendar, Clock, User, CheckCircle2, XCircle, FileText,
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { supabaseAdmin, isAdminAvailable, hasServiceKey } from '../../lib/supabaseAdmin';
-import { useAuth } from '../../hooks/useAuth';
-import Modal from '../../components/Modal';
-import Spinner from '../../components/Spinner';
+import { supabase } from '@db/client';
+import { supabaseAdmin, isAdminAvailable, hasServiceKey } from '@db/adminClient';
+import { useAuth } from '@auth/hooks/useAuth';
+import Modal from '@shared/components/Modal';
+import Spinner from '@shared/components/Spinner';
 
 // ── Coordinator Management & Audit System ─────────────────────────────────────
 // Displays coordinator accounts, activity statistics, real DB timestamps, and

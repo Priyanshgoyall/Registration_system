@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@db/client';
 
 /**
  * Hook to track Supabase auth session state and user role

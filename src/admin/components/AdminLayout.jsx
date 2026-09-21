@@ -14,7 +14,7 @@ import {
   UserCog,
   CreditCard,
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '@auth/hooks/useAuth';
 
 const navItems = [
   { to: '/admin',               label: 'Dashboard',      icon: LayoutDashboard, exact: true },

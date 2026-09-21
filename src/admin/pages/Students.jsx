@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Search, Users, GraduationCap, Phone, School, Download, Save, X, User, Mail, MapPin, Trash2 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import Modal from '../../components/Modal';
-import Spinner from '../../components/Spinner';
-import { exportToCSV } from '../../utils/exportCSV';
+import { supabase } from '@db/client';
+import Modal from '@shared/components/Modal';
+import Spinner from '@shared/components/Spinner';
+import { exportToCSV } from '@shared/utils/exportCSV';
 
 export default function Students() {
   const [students, setStudents] = useState([]);

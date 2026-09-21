@@ -42,11 +42,20 @@ const PHONETIC_CORRECTIONS = [
   [/\btakur\b/gi, 'Thakur'],
   [/\bmisra\b/gi, 'Mishra'],
   [/\bjadav\b/gi, 'Yadav'],
+  [/\bjvt\b/gi, 'JUET'],
+  [/\bjvt\s*guna\b/gi, 'JUET Guna'],
+  [/\bjbt\b/gi, 'JUET'],
+  [/\bjvet\b/gi, 'JUET'],
+  [/\bju\s*et\b/gi, 'JUET'],
+  [/\bjuit\b/gi, 'JUET'],
   [/\bjapee\b/gi, 'Jaypee'],
   [/\bragogarh\b/gi, 'Raghogarh'],
   [/\bgoona\b/gi, 'Guna'],
-  [/'Neel'/gi, 'Neiil'],
-
+  [/\bneel\b/gi, 'Neiil'],
+  [/\bshrivastava\b/gi, 'Srivastava'],
+  [/\bsrivastav\b/gi, 'Srivastava'],
+  [/\bdelhi public school\b/gi, 'Delhi Public School'],
+  [/\bkendriya vidyalaya\b/gi, 'Kendriya Vidyalaya'],
 ];
 
 function applyPhoneticCorrections(text) {
@@ -93,6 +102,10 @@ export function normalizeName(transcript) {
   if (!transcript || typeof transcript !== 'string') return '';
 
   let text = stripPrefix(transcript.trim(), [
+    /^mera naam hai\s+/i,
+    /^mera naam\s+/i,
+    /^aap mera naam\s+/i,
+    /^naam hai\s+/i,
     /^my name is\s+/i,
     /^my name's\s+/i,
     /^i am\s+/i,
@@ -142,6 +155,12 @@ export function normalizeEmail(transcript) {
   if (!transcript || typeof transcript !== 'string') return '';
 
   let text = stripPrefix(transcript.trim().toLowerCase(), [
+    /^mera email id hai\s+/,
+    /^mera email hai\s+/,
+    /^mera gmail id hai\s+/,
+    /^mera gmail hai\s+/,
+    /^email id hai\s+/,
+    /^gmail id hai\s+/,
     /^my gmail id is\s+/,
     /^my gmail is\s+/,
     /^my email id is\s+/,
@@ -206,6 +225,11 @@ export function normalizePhone(transcript) {
   if (!transcript || typeof transcript !== 'string') return '';
 
   const text = stripPrefix(transcript.toLowerCase(), [
+    /^mera phone number hai\s+/,
+    /^mera mobile number hai\s+/,
+    /^mera number hai\s+/,
+    /^mobile number hai\s+/,
+    /^number hai\s+/,
     /^my phone(?: number)? is\s+/,
     /^my number is\s+/,
     /^call me (?:at|on)\s+/,
@@ -243,6 +267,12 @@ export function normalizePhone(transcript) {
  */
 export function normalizeSchool(transcript) {
   let text = stripPrefix(transcript.trim(), [
+    /^mere school ka naam hai\s+/i,
+    /^mere school ka naam\s+/i,
+    /^school ka naam hai\s+/i,
+    /^school ka naam\s+/i,
+    /^main padhta hoon\s+/i,
+    /^main padhti hoon\s+/i,
     /^my school(?: name)? is\s+/i,
     /^i study at\s+/i,
     /^i go to\s+/i,
@@ -264,6 +294,12 @@ export function normalizeSchool(transcript) {
  */
 export function normalizeCity(transcript) {
   let text = stripPrefix(transcript.trim(), [
+    /^mera shahar hai\s+/i,
+    /^mera city hai\s+/i,
+    /^shahar hai\s+/i,
+    /^city hai\s+/i,
+    /^main rahta hoon\s+/i,
+    /^main rahti hoon\s+/i,
     /^my city is\s+/i,
     /^my location is\s+/i,
     /^i live in\s+/i,
